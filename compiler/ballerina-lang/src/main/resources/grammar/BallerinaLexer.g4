@@ -268,6 +268,7 @@ HexadecimalFloatingPointLiteral
 DecimalFloatingPointNumber
     :   DecimalNumeral ExponentPart DecimalFloatSelector?
     |   DottedDecimalNumber ExponentPart? DecimalFloatSelector?
+    |   DecimalNumeral DecimalFloatSelector
     ;
 
 DecimalExtendedFloatingPointNumber
