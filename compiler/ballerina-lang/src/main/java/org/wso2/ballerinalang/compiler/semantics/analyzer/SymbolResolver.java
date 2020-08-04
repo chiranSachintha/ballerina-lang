@@ -982,14 +982,23 @@ public class SymbolResolver extends BLangNodeVisitor {
         if (recordTypeNode.symbol == null) {
             EnumSet<Flag> flags = recordTypeNode.isAnonymous ? EnumSet.of(Flag.PUBLIC, Flag.ANONYMOUS)
                     : EnumSet.noneOf(Flag.class);
+            if(recordTypeNode.isLocal && !recordTypeNode.isAnonymous) {
+                flags.add(Flag.LOCAL);
+            }
             BRecordTypeSymbol recordSymbol = Symbols.createRecordSymbol(Flags.asMask(flags), Names.EMPTY,
                                                                         env.enclPkg.symbol.pkgID, null,
                                                                         env.scope.owner);
-            BRecordType recordType = new BRecordType(recordSymbol);
+            EnumSet<Flag> symbolFlags = recordTypeNode.isLocal ? EnumSet.of(Flag.LOCAL) : EnumSet.noneOf(Flag.class);
+            BRecordType recordType;
+            if(recordTypeNode.isLocal && !recordTypeNode.isAnonymous) {
+                recordType = new BRecordType(recordSymbol, Flags.asMask(symbolFlags));
+            } else {
+                recordType = new BRecordType(recordSymbol);
+            }
             recordSymbol.type = recordType;
             recordTypeNode.symbol = recordSymbol;
 
-            if (env.node.getKind() != NodeKind.PACKAGE) {
+            if (env.node.getKind() != NodeKind.PACKAGE && recordTypeNode.isAnonymous) {
                 recordSymbol.name = names.fromString(
                         anonymousModelHelper.getNextAnonymousTypeKey(env.enclPkg.packageID));
                 symbolEnter.defineSymbol(recordTypeNode.pos, recordTypeNode.symbol, env);
