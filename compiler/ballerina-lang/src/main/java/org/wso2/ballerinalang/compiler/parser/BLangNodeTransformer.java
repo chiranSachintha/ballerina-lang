@@ -94,6 +94,7 @@ import io.ballerinalang.compiler.syntax.tree.LimitClauseNode;
 import io.ballerinalang.compiler.syntax.tree.ListBindingPatternNode;
 import io.ballerinalang.compiler.syntax.tree.ListConstructorExpressionNode;
 import io.ballerinalang.compiler.syntax.tree.ListenerDeclarationNode;
+import io.ballerinalang.compiler.syntax.tree.LocalTypeDefinitionStatementNode;
 import io.ballerinalang.compiler.syntax.tree.LockStatementNode;
 import io.ballerinalang.compiler.syntax.tree.MappingBindingPatternNode;
 import io.ballerinalang.compiler.syntax.tree.MappingConstructorExpressionNode;
@@ -337,6 +338,7 @@ import org.wso2.ballerinalang.compiler.tree.statements.BLangExpressionStmt;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangForeach;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangForkJoin;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangIf;
+import org.wso2.ballerinalang.compiler.tree.statements.BLangLocalTypeDefinition;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangMatch;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangPanic;
@@ -600,6 +602,16 @@ public class BLangNodeTransformer extends NodeTransformer<BLangNode> {
             constantNode.associatedTypeDefinition = typeDef;
         }
         return constantNode;
+    }
+
+    public BLangNode transform(LocalTypeDefinitionStatementNode localTypeDefinitionStatementNode) {
+        BLangLocalTypeDefinition localTypeDef = (BLangLocalTypeDefinition) TreeBuilder.createLocalTypeDefinition();
+        BLangIdentifier identifierNode =  this.createIdentifier((Token)localTypeDefinitionStatementNode.typeName());
+        localTypeDef.setName(identifierNode);
+        localTypeDef.typeNode = createTypeNode(localTypeDefinitionStatementNode.typeDescriptor());
+        localTypeDef.pos = getPosition(localTypeDefinitionStatementNode);
+        localTypeDef.annAttachments = applyAll(localTypeDefinitionStatementNode.annotations());
+        return localTypeDef;
     }
 
     public BLangNode transform(TypeDefinitionNode typeDefNode) {
