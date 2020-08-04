@@ -105,6 +105,7 @@ import org.wso2.ballerinalang.compiler.tree.expressions.BLangSimpleVarRef;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangXMLAttribute;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangXMLQName;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangAssignment;
+import org.wso2.ballerinalang.compiler.tree.statements.BLangLocalTypeDefinition;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangXMLNSStatement;
 import org.wso2.ballerinalang.compiler.tree.types.BLangArrayType;
 import org.wso2.ballerinalang.compiler.tree.types.BLangConstrainedType;
@@ -1166,6 +1167,25 @@ public class SymbolEnter extends BLangNodeVisitor {
             // check if the variable is defined as a 'never' type (except inside a record type)
             // if so, log an error
             dlog.error(varNode.pos, DiagnosticCode.NEVER_TYPED_VAR_DEF_NOT_ALLOWED, varSymbol.name);
+        }
+    }
+
+    public void visit(BLangLocalTypeDefinition localTypeDefinition) {
+        BType definedType = symResolver.resolveTypeNode(localTypeDefinition.typeNode, env);
+        BTypeSymbol typeDefSymbol;
+        if (definedType.tsymbol.name != Names.EMPTY) {
+            typeDefSymbol = definedType.tsymbol.createLabelSymbol();
+        } else {
+            typeDefSymbol = definedType.tsymbol;
+        }
+        typeDefSymbol.name = names.fromIdNode(localTypeDefinition.getName());
+        typeDefSymbol.pkgID = env.enclPkg.packageID;
+        localTypeDefinition.symbol = definedType.tsymbol;
+        defineSymbol(localTypeDefinition.pos, typeDefSymbol, env);
+        if (localTypeDefinition.typeNode.getKind() == NodeKind.RECORD_TYPE) {
+            defineNode(localTypeDefinition.typeNode, env);
+        } else if (localTypeDefinition.typeNode.getKind() == NodeKind.OBJECT_TYPE) {
+            defineNode(localTypeDefinition.typeNode, env);
         }
     }
 

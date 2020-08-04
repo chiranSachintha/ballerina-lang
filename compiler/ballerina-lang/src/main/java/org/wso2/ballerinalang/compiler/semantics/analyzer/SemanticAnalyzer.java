@@ -112,6 +112,7 @@ import org.wso2.ballerinalang.compiler.tree.statements.BLangForeach;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangForkJoin;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangIf;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock;
+import org.wso2.ballerinalang.compiler.tree.statements.BLangLocalTypeDefinition;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangMatch;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangMatch.BLangMatchStaticBindingPatternClause;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangMatch.BLangMatchStructuredBindingPatternClause;
@@ -397,6 +398,27 @@ public class SemanticAnalyzer extends BLangNodeVisitor {
         });
         validateAnnotationAttachmentCount(typeDefinition.annAttachments);
         validateBuiltinTypeAnnotationAttachment(typeDefinition.annAttachments);
+    }
+
+    public void visit(BLangLocalTypeDefinition localTypeDefinition) {
+        symbolEnter.defineNode(localTypeDefinition, env);
+        if (localTypeDefinition.typeNode.getKind() == NodeKind.OBJECT_TYPE
+                || localTypeDefinition.typeNode.getKind() == NodeKind.RECORD_TYPE
+                || localTypeDefinition.typeNode.getKind() == NodeKind.ERROR_TYPE
+                || localTypeDefinition.typeNode.getKind() == NodeKind.FINITE_TYPE_NODE) {
+            analyzeDef(localTypeDefinition.typeNode, env);
+        }
+
+        localTypeDefinition.annAttachments.forEach(annotationAttachment -> {
+            if (localTypeDefinition.typeNode.getKind() == NodeKind.OBJECT_TYPE) {
+                annotationAttachment.attachPoints.add(AttachPoint.Point.OBJECT);
+            }
+            annotationAttachment.attachPoints.add(AttachPoint.Point.TYPE);
+
+            annotationAttachment.accept(this);
+        });
+        validateAnnotationAttachmentCount(localTypeDefinition.annAttachments);
+        validateBuiltinTypeAnnotationAttachment(localTypeDefinition.annAttachments);
     }
 
     public void visit(BLangTypeConversionExpr conversionExpr) {
