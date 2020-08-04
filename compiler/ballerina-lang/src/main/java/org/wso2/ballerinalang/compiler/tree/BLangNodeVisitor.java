@@ -130,6 +130,7 @@ import org.wso2.ballerinalang.compiler.tree.statements.BLangExpressionStmt;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangForeach;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangForkJoin;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangIf;
+import org.wso2.ballerinalang.compiler.tree.statements.BLangLocalTypeDefinition;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock.BLangLockStmt;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock.BLangUnLockStmt;
@@ -274,6 +275,8 @@ public abstract class BLangNodeVisitor {
     public void visit(BLangSimpleVariableDef varDefNode) {
         throw new AssertionError();
     }
+
+    public void visit(BLangLocalTypeDefinition localTypeDefinition) {throw new AssertionError();}
 
     public void visit(BLangAssignment assignNode) {
         throw new AssertionError();

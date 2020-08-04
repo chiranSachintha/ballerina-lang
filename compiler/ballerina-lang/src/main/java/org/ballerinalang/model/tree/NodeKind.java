@@ -170,6 +170,7 @@ public enum NodeKind {
     DO_ACTION,
     COMMIT,
     ROLLBACK,
+    LOCAL_TYPE_DEFINITION,
 
     /* Clauses */
     SELECT,

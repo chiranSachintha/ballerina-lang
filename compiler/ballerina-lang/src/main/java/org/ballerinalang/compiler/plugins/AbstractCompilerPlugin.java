@@ -25,6 +25,7 @@ import org.ballerinalang.model.tree.PackageNode;
 import org.ballerinalang.model.tree.ServiceNode;
 import org.ballerinalang.model.tree.SimpleVariableNode;
 import org.ballerinalang.model.tree.TypeDefinition;
+import org.ballerinalang.model.tree.statements.LocalTypeDefinitionNode;
 import org.ballerinalang.util.diagnostic.DiagnosticLog;
 import org.wso2.ballerinalang.compiler.tree.BLangTestablePackage;
 
@@ -55,6 +56,9 @@ public abstract class AbstractCompilerPlugin implements CompilerPlugin {
 
     @Override
     public void process(TypeDefinition typeDefinition, List<AnnotationAttachmentNode> annotations) {
+    }
+
+    public void process(LocalTypeDefinitionNode localTypeDefinitionNode, List<AnnotationAttachmentNode> annotations) {
     }
 
     @Override

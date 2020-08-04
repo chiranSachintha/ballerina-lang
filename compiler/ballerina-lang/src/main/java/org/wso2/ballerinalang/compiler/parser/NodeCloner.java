@@ -152,6 +152,7 @@ import org.wso2.ballerinalang.compiler.tree.statements.BLangExpressionStmt;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangForeach;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangForkJoin;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangIf;
+import org.wso2.ballerinalang.compiler.tree.statements.BLangLocalTypeDefinition;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangMatch;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangMatch.BLangMatchStaticBindingPatternClause;
@@ -470,6 +471,16 @@ public class NodeCloner extends BLangNodeVisitor {
         clone.markdownDocumentationAttachment = clone(source.markdownDocumentationAttachment);
         clone.flagSet = cloneSet(source.flagSet, Flag.class);
         clone.precedence = source.precedence;
+    }
+
+    @Override
+    public void visit(BLangLocalTypeDefinition source) {
+        BLangLocalTypeDefinition clone = new BLangLocalTypeDefinition();
+        source.cloneRef = clone;
+        clone.name = source.name;
+        clone.typeNode = clone(source.typeNode);
+        clone.annAttachments = cloneList(source.annAttachments);
+        clone.flagSet = cloneSet(source.flagSet, Flag.class);
     }
 
     @Override
