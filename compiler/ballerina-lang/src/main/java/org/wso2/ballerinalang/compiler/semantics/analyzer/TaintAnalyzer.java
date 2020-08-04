@@ -132,6 +132,7 @@ import org.wso2.ballerinalang.compiler.tree.statements.BLangForeach;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangForkJoin;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangIf;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock;
+import org.wso2.ballerinalang.compiler.tree.statements.BLangLocalTypeDefinition;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangMatch;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangPanic;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangRecordDestructure;
@@ -348,6 +349,13 @@ public class TaintAnalyzer extends BLangNodeVisitor {
         if (typeDefinition.typeNode.getKind() == NodeKind.OBJECT_TYPE
                 || typeDefinition.typeNode.getKind() == NodeKind.RECORD_TYPE) {
             typeDefinition.typeNode.accept(this);
+        }
+    }
+
+    public void visit(BLangLocalTypeDefinition localTypeDefinition) {
+        if (localTypeDefinition.typeNode.getKind() == NodeKind.OBJECT_TYPE
+                || localTypeDefinition.typeNode.getKind() == NodeKind.RECORD_TYPE) {
+            localTypeDefinition.typeNode.accept(this);
         }
     }
 
