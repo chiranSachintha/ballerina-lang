@@ -829,6 +829,8 @@ public class BLangNodeTransformer extends NodeTransformer<BLangNode> {
             }
         }
 
+        objectTypeNode.isLocal= this.isInLocalContext;
+
         NodeList<Node> members = objTypeDescNode.members();
         for (Node node : members) {
             // TODO: Check for fields other than SimpleVariableNode
