@@ -431,6 +431,25 @@ public class JvmTypeGen {
                                         asyncDataCollector);
     }
 
+    static void generateValueCreatorMethodsWithBtypeAsParam(ClassWriter cw, List<BIRTypeDefinition> typeDefs,
+                                            BIRNode.BIRPackage moduleId, String typeOwnerClass,
+                                                            AsyncDataCollector asyncDataCollector) {
+
+        List<BIRTypeDefinition> recordTypeDefs = new ArrayList<>();
+
+        int i = 0;
+        for (BIRTypeDefinition optionalTypeDef : typeDefs) {
+            BIRTypeDefinition typeDef = getTypeDef(optionalTypeDef);
+            BType bType = typeDef.type;
+            if (bType.tag == TypeTags.RECORD) {
+                recordTypeDefs.add(i, typeDef);
+                i += 1;
+            }
+        }
+
+        generateRecordValueCreateMethodWithBtypeAsParam(cw, recordTypeDefs, moduleId, typeOwnerClass, asyncDataCollector);
+    }
+
     private static void generateRecordValueCreateMethod(ClassWriter cw, List<BIRTypeDefinition> recordTypeDefs,
                                                         BIRNode.BIRPackage moduleId, String typeOwnerClass,
                                                         AsyncDataCollector asyncDataCollector) {
@@ -490,6 +509,69 @@ public class JvmTypeGen {
         mv.visitEnd();
     }
 
+    private static void generateRecordValueCreateMethodWithBtypeAsParam(ClassWriter cw, List<BIRTypeDefinition> recordTypeDefs,
+                                                        BIRNode.BIRPackage moduleId, String typeOwnerClass,
+                                                        AsyncDataCollector asyncDataCollector) {
+        MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, CREATE_RECORD_VALUE_BTYPE,
+                String.format("(L%s;L%s;)L%s;", STRING_VALUE, BTYPE, MAP_VALUE),
+                String.format("(L%s;L%s;)L%s<L%s;L%s;>;", STRING_VALUE, BTYPE, MAP_VALUE, STRING_VALUE, OBJECT), null);
+
+        mv.visitCode();
+
+        int fieldNameRegIndex = 1;
+        Label defaultCaseLabel = new Label();
+
+        // sort the fields before generating switch case
+        recordTypeDefs.sort(NAME_HASH_COMPARATOR);
+
+        List<Label> labels = createLabelsForSwitch(mv, fieldNameRegIndex, recordTypeDefs, defaultCaseLabel);
+        List<Label> targetLabels = createLabelsForEqualCheck(mv, fieldNameRegIndex, recordTypeDefs, labels,
+                defaultCaseLabel);
+
+        int i = 0;
+
+        for (BIRTypeDefinition optionalTypeDef : recordTypeDefs) {
+            BIRTypeDefinition typeDef = getTypeDef(optionalTypeDef);
+            String fieldName = getTypeFieldName(typeDef.name.value);
+            Label targetLabel = targetLabels.get(i);
+            mv.visitLabel(targetLabel);
+            mv.visitVarInsn(ALOAD, 0);
+            String className = getTypeValueClassName(moduleId, typeDef.name.value);
+            mv.visitTypeInsn(NEW, className);
+            mv.visitInsn(DUP);
+            mv.visitVarInsn(ALOAD, 2);
+            mv.visitMethodInsn(INVOKESPECIAL, className, "<init>", String.format("(L%s;)V", BTYPE), false);
+
+            mv.visitInsn(DUP);
+            mv.visitTypeInsn(NEW, STRAND);
+            mv.visitInsn(DUP);
+            mv.visitInsn(ACONST_NULL);
+            String metaDataVarName = getStrandMetadataVarName(CREATE_RECORD_VALUE);
+            asyncDataCollector
+                    .getStrandMetadata().putIfAbsent(metaDataVarName, new ScheduleFunctionInfo(CREATE_RECORD_VALUE));
+            mv.visitFieldInsn(GETSTATIC, typeOwnerClass, metaDataVarName, String.format("L%s;", STRAND_METADATA));
+            mv.visitInsn(ACONST_NULL);
+            mv.visitInsn(ACONST_NULL);
+            mv.visitInsn(ACONST_NULL);
+            mv.visitMethodInsn(INVOKESPECIAL, STRAND, "<init>", String.format("(L%s;L%s;L%s;L%s;L%s;)V", STRING_VALUE
+                    , STRAND_METADATA, SCHEDULER, STRAND, MAP), false);
+            mv.visitInsn(SWAP);
+            mv.visitMethodInsn(INVOKESTATIC, className, "$init", String.format("(L%s;L%s;)V", STRAND, MAP_VALUE),
+                               false);
+
+            mv.visitInsn(ARETURN);
+            i += 1;
+        }
+
+        createDefaultCase(mv, defaultCaseLabel, fieldNameRegIndex);
+        mv.visitMaxs(recordTypeDefs.size() + 10, recordTypeDefs.size() + 10);
+        mv.visitEnd();
+    }
+
+    static BIRVariableDcl convertLocalTypeDefNameToBIRVar(BType type, Name name) {
+        return new BIRVariableDcl(type, name, VarScope.FUNCTION, VarKind.LOCAL);
+
+    }
     private static void generateObjectValueCreateMethod(ClassWriter cw, List<BIRTypeDefinition> objectTypeDefs,
                                                         BIRNode.BIRPackage moduleId, String typeOwnerClass,
                                                         SymbolTable symbolTable,

@@ -112,9 +112,9 @@ import static org.wso2.ballerinalang.compiler.bir.codegen.JvmMethodGen.getTypeDe
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmMethodGen.isExternFunc;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmMethodGen.visitStrandMetadataField;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTerminatorGen.toNameString;
-import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTypeGen.generateCreateTypesMethod;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTypeGen.generateUserDefinedTypeFields;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTypeGen.generateValueCreatorMethods;
+import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTypeGen.generateValueCreatorMethodsWithBtypeAsParam;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTypeGen.isServiceDefAvailable;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmValueGen.getTypeValueClassName;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmValueGen.injectDefaultParamInitsToAttachedFuncs;
@@ -134,10 +134,12 @@ public class JvmPackageGen {
     public final SymbolTable symbolTable;
     public final PackageCache packageCache;
     private final JvmMethodGen jvmMethodGen;
+    final Map<String, byte[]> jarEntries = new ConcurrentHashMap<>();
     private Map<String, BIRFunctionWrapper> birFunctionMap;
     private Map<String, String> externClassMap;
     private Map<String, String> globalVarClassMap;
     private Map<String, PackageID> dependentModules;
+    public List<BIRTypeDefinition> localTypeDefinitions;
     private BLangDiagnosticLogHelper dlog;
 
     JvmPackageGen(SymbolTable symbolTable, PackageCache packageCache, BLangDiagnosticLogHelper dlog) {
@@ -146,6 +148,7 @@ public class JvmPackageGen {
         globalVarClassMap = new HashMap<>();
         externClassMap = new HashMap<>();
         dependentModules = new LinkedHashMap<>();
+        localTypeDefinitions = new ArrayList<>();
         this.symbolTable = symbolTable;
         this.packageCache = packageCache;
         this.dlog = dlog;
@@ -481,7 +484,7 @@ public class JvmPackageGen {
 
         // generate object/record value classes
         JvmValueGen valueGen = new JvmValueGen(module, this, jvmMethodGen);
-        valueGen.generateValueClasses(jarEntries);
+        valueGen.generateValueClasses(jarEntries, module.typeDefs);
 
         // generate frame classes
         jvmMethodGen.generateFrameClasses(module, jarEntries);
@@ -511,6 +514,8 @@ public class JvmPackageGen {
                 generateUserDefinedTypeFields(cw, module.typeDefs);
                 generateValueCreatorMethods(cw, module.typeDefs, module, moduleInitClass, symbolTable,
                                             asyncDataCollector);
+                generateValueCreatorMethodsWithBtypeAsParam(cw, localTypeDefinitions, module, moduleInitClass,
+                        asyncDataCollector);
                 // populate global variable to class name mapping and generate them
                 for (BIRGlobalVariableDcl globalVar : module.globalVars) {
                     if (globalVar != null) {
@@ -535,7 +540,7 @@ public class JvmPackageGen {
                 jvmMethodGen.generateLambdaForPackageInits(cw, module, moduleClass, moduleImports);
 
                 generateLockForVariable(cw);
-                generateCreateTypesMethod(cw, module.typeDefs, moduleInitClass, symbolTable);
+                jvmMethodGen.generateCreateTypesMethod(cw, module.typeDefs, moduleInitClass, symbolTable);
                 jvmMethodGen.generateModuleInitializer(cw, module, moduleInitClass);
                 jvmMethodGen.generateExecutionStopMethod(cw, moduleInitClass, module, moduleImports,
                                                          asyncDataCollector);
