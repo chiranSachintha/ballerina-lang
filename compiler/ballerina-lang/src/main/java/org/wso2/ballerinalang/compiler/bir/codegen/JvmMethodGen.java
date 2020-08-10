@@ -223,6 +223,7 @@ import static org.wso2.ballerinalang.compiler.bir.model.BIRNonTerminator.XMLAcce
 import static org.wso2.ballerinalang.compiler.bir.model.BIRTerminator.Branch;
 import static org.wso2.ballerinalang.compiler.bir.model.BIRTerminator.Call;
 import static org.wso2.ballerinalang.compiler.bir.model.BIRTerminator.Return;
+import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTypeGen.convertLocalTypeDefNameToBIRVar;
 
 /**
  * BIR function to JVM byte code generation class.
@@ -1698,7 +1699,10 @@ public class JvmMethodGen {
             localVarOffset = 0;
             access += ACC_STATIC;
         }
-
+        generateFrameClassForLocalTypeDef(module, func.localTypeDefs, jvmPackageGen.jarEntries);
+        rewriteRecordInits(func.localTypeDefs);
+        JvmValueGen valueGen = new JvmValueGen(module, jvmPackageGen, this);
+        valueGen.generateValueClasses(jvmPackageGen.jarEntries, func.localTypeDefs);
         MethodVisitor mv = cw.visitMethod(access, funcName, desc, null, null);
         JvmTypeGen typeGen = new JvmTypeGen(indexMap);
         JvmCastGen castGen = new JvmCastGen(typeGen);
@@ -2891,6 +2895,24 @@ public class JvmMethodGen {
                     // Only attach function of records is the record init. That should be
                     // generated as a static function.
                     attachedType = null;
+                } else {
+                    attachedType = typeDef.type;
+                }
+                attachedFuncs.parallelStream().forEach(func ->
+                        generateFrameClassForFunction(pkg, func, pkgEntries, attachedType));
+            }
+        }
+    }
+
+    void generateFrameClassForLocalTypeDef(BIRPackage pkg, List<BIRTypeDefinition> typeDefs, Map<String, byte[]> pkgEntries) {
+        for (BIRTypeDefinition typeDef : typeDefs) {
+            List<BIRFunction> attachedFuncs = typeDef.attachedFuncs;
+            if (attachedFuncs != null) {
+                BType attachedType;
+                if (typeDef.type.tag == TypeTags.RECORD) {
+                    // Only attach function of records is the record init. That should be
+                    // generated as a static function.
+                    attachedType = typeDef.type;
                 } else {
                     attachedType = typeDef.type;
                 }
