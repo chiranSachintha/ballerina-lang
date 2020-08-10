@@ -36,6 +36,7 @@ public class BObjectType extends BStructureType {
 
     private final boolean readonly;
     private BIntersectionType immutableType;
+    private final boolean isLocal;
 
     /**
      * Create a {@code BObjectType} which represents the user defined struct type.
@@ -47,6 +48,7 @@ public class BObjectType extends BStructureType {
     public BObjectType(String typeName, BPackage pkg, int flags) {
         super(typeName, pkg, flags, Object.class);
         this.readonly = Flags.isFlagOn(flags, Flags.READONLY);
+        this.isLocal = Flags.isFlagOn(flags, Flags.LOCAL);
     }
 
     @Override

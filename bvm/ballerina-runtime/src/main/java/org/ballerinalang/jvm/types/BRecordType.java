@@ -36,6 +36,7 @@ public class BRecordType extends BStructureType {
     public boolean sealed;
     public BType restFieldType;
     public int typeFlags;
+    private final boolean isLocal;
     private final boolean readonly;
     private BIntersectionType immutableType;
 
@@ -53,6 +54,7 @@ public class BRecordType extends BStructureType {
         this.sealed = sealed;
         this.typeFlags = typeFlags;
         this.readonly = Flags.isFlagOn(flags, Flags.READONLY);
+        this.isLocal = Flags.isFlagOn(flags, Flags.LOCAL);
     }
 
     /**
@@ -73,11 +75,16 @@ public class BRecordType extends BStructureType {
         this.sealed = sealed;
         this.typeFlags = typeFlags;
         this.readonly = Flags.isFlagOn(flags, Flags.READONLY);
+        this.isLocal = Flags.isFlagOn(flags, Flags.LOCAL);
     }
 
     @Override
     public <V extends Object> V getZeroValue() {
-        return (V) BallerinaValues.createRecordValue(this.pkg, this.typeName);
+        if(!this.isLocal) {
+            return (V) BallerinaValues.createRecordValue(this.pkg, this.typeName);
+        } else {
+            return (V) BallerinaValues.createRecordValueWithBtype(this.pkg, this.typeName, this);
+        }
     }
 
     @SuppressWarnings("unchecked")

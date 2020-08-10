@@ -114,7 +114,7 @@ import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.BUILT_IN_
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.B_STRING_VALUE;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.CREATE_OBJECT_VALUE;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.CREATE_RECORD_VALUE;
-import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.CREATE_RECORD_VALUE_BTYPE;
+import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.CREATE_RECORD_VALUE_WITH_BTYPE;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.DECIMAL_VALUE;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.DOUBLE_VALUE;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.ERROR_TYPE;
@@ -557,7 +557,7 @@ public class JvmTypeGen {
     private static void generateRecordValueCreateMethodWithBtypeAsParam(ClassWriter cw, List<BIRTypeDefinition> recordTypeDefs,
                                                         BIRNode.BIRPackage moduleId, String typeOwnerClass,
                                                         AsyncDataCollector asyncDataCollector) {
-        MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, CREATE_RECORD_VALUE_BTYPE,
+        MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, CREATE_RECORD_VALUE_WITH_BTYPE,
                 String.format("(L%s;L%s;)L%s;", STRING_VALUE, BTYPE, MAP_VALUE),
                 String.format("(L%s;L%s;)L%s<L%s;L%s;>;", STRING_VALUE, BTYPE, MAP_VALUE, STRING_VALUE, OBJECT), null);
 

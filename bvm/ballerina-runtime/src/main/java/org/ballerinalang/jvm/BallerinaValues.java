@@ -23,6 +23,7 @@ import org.ballerinalang.jvm.scheduling.Strand;
 import org.ballerinalang.jvm.types.BField;
 import org.ballerinalang.jvm.types.BPackage;
 import org.ballerinalang.jvm.types.BRecordType;
+import org.ballerinalang.jvm.types.BType;
 import org.ballerinalang.jvm.util.Flags;
 import org.ballerinalang.jvm.values.MapValue;
 import org.ballerinalang.jvm.values.MapValueImpl;
@@ -50,6 +51,11 @@ public class BallerinaValues {
     public static MapValue<BString, Object> createRecordValue(BPackage packageId, String recordTypeName) {
         ValueCreator valueCreator = ValueCreator.getValueCreator(packageId.toString());
         return valueCreator.createRecordValue(recordTypeName);
+    }
+
+    public static MapValue<BString, Object> createRecordValueWithBtype(BPackage packageId, String recordTypeName, BType type) {
+        ValueCreator valueCreator = ValueCreator.getValueCreator(packageId.toString());
+        return valueCreator.createRecordValueWithBtype(recordTypeName, type);
     }
 
     /**
