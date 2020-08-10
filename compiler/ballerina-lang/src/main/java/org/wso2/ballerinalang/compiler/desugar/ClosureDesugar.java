@@ -120,6 +120,7 @@ import org.wso2.ballerinalang.compiler.tree.statements.BLangExpressionStmt;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangForeach;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangForkJoin;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangIf;
+import org.wso2.ballerinalang.compiler.tree.statements.BLangLocalTypeDefinition;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock.BLangLockStmt;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock.BLangUnLockStmt;
@@ -511,6 +512,14 @@ public class ClosureDesugar extends BLangNodeVisitor {
             typeDef.typeNode = rewrite(typeDef.typeNode, env);
         }
         result = typeDef;
+    }
+
+    public void visit(BLangLocalTypeDefinition localTypeDefinition) {
+        if (localTypeDefinition.typeNode.getKind() == NodeKind.OBJECT_TYPE
+                || localTypeDefinition.typeNode.getKind() == NodeKind.RECORD_TYPE) {
+            localTypeDefinition.typeNode = rewrite(localTypeDefinition.typeNode, env);
+        }
+        result = localTypeDefinition;
     }
 
     @Override
