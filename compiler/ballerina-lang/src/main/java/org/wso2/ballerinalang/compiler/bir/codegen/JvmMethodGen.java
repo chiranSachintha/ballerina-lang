@@ -185,6 +185,7 @@ import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.TYPEDESC_
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.VALUE_CREATOR;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.WINDOWS_PATH_SEPERATOR;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.XML_VALUE;
+import static org.wso2.ballerinalang.compiler.bir.codegen.JvmDesugarPhase.rewriteRecordInits;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmInstructionGen.visitInvokeDyn;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmPackageGen.getModuleLevelClassName;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmPackageGen.getPackageName;
@@ -192,8 +193,8 @@ import static org.wso2.ballerinalang.compiler.bir.codegen.JvmPackageGen.packageT
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTerminatorGen.cleanupObjectTypeName;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTerminatorGen.loadChannelDetails;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTerminatorGen.toNameString;
-import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTypeGen.loadLocalType;
-import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTypeGen.loadType;
+import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTypeGen.creatLocalTypeDef;
+import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTypeGen.getTypeFieldName;
 import static org.wso2.ballerinalang.compiler.bir.codegen.interop.ExternalMethodGen.genJMethodForBExternalFunc;
 import static org.wso2.ballerinalang.compiler.bir.codegen.interop.ExternalMethodGen.isBallerinaBuiltinModule;
 import static org.wso2.ballerinalang.compiler.bir.codegen.interop.InteropMethodGen.getJTypeSignature;
@@ -1744,6 +1745,28 @@ public class JvmMethodGen {
             k += 1;
         }
 
+        String fieldName;
+        for (BIRTypeDefinition optionalTypeDef : func.localTypeDefs) {
+            BIRTypeDefinition typeDef = getTypeDef(optionalTypeDef);
+            BIRVariableDcl typeVar = convertLocalTypeDefNameToBIRVar(typeDef.type, typeDef.name);
+            int index = indexMap.getIndex(typeVar);
+            fieldName = getTypeFieldName(typeDef.name.value);
+            Label l1 = new Label();
+            mv.visitLabel(l1);
+            BType bType = typeDef.type;
+            if (bType.tag == TypeTags.RECORD || bType.tag == TypeTags.ERROR || bType.tag == TypeTags.OBJECT) {
+                genDefaultValue(mv, bType, index);
+
+                creatLocalTypeDef(mv, typeDef, moduleClassName, index);
+                typeGen.populateLocalTypeDef(mv,typeDef,moduleClassName,symbolTable, index, indexMap);
+
+                Label l2 = new Label();
+                mv.visitLabel(l2);
+                mv.visitLocalVariable(fieldName, getJVMTypeSign(bType), null, l1, l2, index);
+            }
+
+        }
+
         BIRVariableDcl varDcl = getVariableDcl(localVars.get(0));
         returnVarRefIndex = indexMap.getIndex(varDcl);
         genDefaultValue(mv, retType, returnVarRefIndex);
@@ -2314,6 +2337,31 @@ public class JvmMethodGen {
             JvmInstructionGen.addBoxInsn(mv, returnType);
         }
         mv.visitInsn(ARETURN);
+        mv.visitMaxs(0, 0);
+        mv.visitEnd();
+    }
+
+    void generateCreateTypesMethod(ClassWriter cw, List<BIRTypeDefinition> typeDefs, String typeOwnerClass,
+                                   SymbolTable symbolTable) {
+
+        BIRVarToJVMIndexMap indexMap = new BIRVarToJVMIndexMap();
+        JvmTypeGen typeGen = new JvmTypeGen(indexMap);
+
+        typeGen.createTypesInstance(cw, typeDefs, typeOwnerClass);
+        List<String> populateTypeFuncNames = typeGen.populateTypes(cw, typeDefs, typeOwnerClass, symbolTable);
+
+        MethodVisitor mv = cw.visitMethod(ACC_PUBLIC + ACC_STATIC, "$createTypes", "()V", null, null);
+        mv.visitCode();
+
+        // Invoke create-type-instances method
+        mv.visitMethodInsn(INVOKESTATIC, typeOwnerClass, "$createTypeInstances", "()V", false);
+
+        // Invoke the populate-type functions
+        for (String funcName : populateTypeFuncNames) {
+            mv.visitMethodInsn(INVOKESTATIC, typeOwnerClass, funcName, "()V", false);
+        }
+
+        mv.visitInsn(RETURN);
         mv.visitMaxs(0, 0);
         mv.visitEnd();
     }

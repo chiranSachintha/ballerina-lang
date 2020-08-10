@@ -18,6 +18,7 @@
 package org.wso2.ballerinalang.compiler.bir.codegen;
 
 import org.ballerinalang.compiler.BLangCompilerException;
+import org.ballerinalang.model.elements.Flag;
 import org.ballerinalang.model.elements.PackageID;
 import org.ballerinalang.model.types.SelectivelyImmutableReferenceType;
 import org.objectweb.asm.ClassWriter;
@@ -113,6 +114,7 @@ import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.BUILT_IN_
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.B_STRING_VALUE;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.CREATE_OBJECT_VALUE;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.CREATE_RECORD_VALUE;
+import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.CREATE_RECORD_VALUE_BTYPE;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.DECIMAL_VALUE;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.DOUBLE_VALUE;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.ERROR_TYPE;
@@ -173,6 +175,7 @@ import static org.wso2.ballerinalang.compiler.bir.codegen.JvmValueGen.createDefa
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmValueGen.createLabelsForEqualCheck;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmValueGen.createLabelsForSwitch;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmValueGen.getTypeValueClassName;
+import static org.wso2.ballerinalang.util.Flags.unMask;
 
 /**
  * BIR types to JVM byte code generation class.
@@ -212,29 +215,7 @@ public class JvmTypeGen {
         }
     }
 
-    static void generateCreateTypesMethod(ClassWriter cw, List<BIRTypeDefinition> typeDefs, String typeOwnerClass,
-                                          SymbolTable symbolTable) {
-
-        createTypesInstance(cw, typeDefs, typeOwnerClass);
-        List<String> populateTypeFuncNames = populateTypes(cw, typeDefs, typeOwnerClass, symbolTable);
-
-        MethodVisitor mv = cw.visitMethod(ACC_PUBLIC + ACC_STATIC, "$createTypes", "()V", null, null);
-        mv.visitCode();
-
-        // Invoke create-type-instances method
-        mv.visitMethodInsn(INVOKESTATIC, typeOwnerClass, "$createTypeInstances", "()V", false);
-
-        // Invoke the populate-type functions
-        for (String funcName : populateTypeFuncNames) {
-            mv.visitMethodInsn(INVOKESTATIC, typeOwnerClass, funcName, "()V", false);
-        }
-
-        mv.visitInsn(RETURN);
-        mv.visitMaxs(0, 0);
-        mv.visitEnd();
-    }
-
-    private static void createTypesInstance(ClassWriter cw, List<BIRTypeDefinition> typeDefs, String typeOwnerClass) {
+    static void createTypesInstance(ClassWriter cw, List<BIRTypeDefinition> typeDefs, String typeOwnerClass) {
 
         MethodVisitor mv = cw.visitMethod(ACC_PUBLIC + ACC_STATIC, "$createTypeInstances", "()V", null, null);
         mv.visitCode();
@@ -349,7 +330,71 @@ public class JvmTypeGen {
         return funcNames;
     }
 
-    private static void addImmutableType(MethodVisitor mv, BStructureType structureType) {
+    static void creatLocalTypeDef(MethodVisitor mv, BIRTypeDefinition localTypeDef, String moduleClassName, int index) {
+
+        BType bType = localTypeDef.type;
+        if (bType.tag == TypeTags.RECORD) {
+            createRecordType(mv, (BRecordType) bType);
+        }
+        else if (bType.tag == TypeTags.OBJECT) {
+            if (bType instanceof BServiceType) {
+                createServiceType(mv, (BServiceType) bType);
+            } else {
+                createObjectType(mv, (BObjectType) bType);
+            }
+        } else {
+            // do not generate anything for other types (e.g.: finite type, unions, etc.)
+            return;
+        }
+
+        mv.visitVarInsn(ASTORE, index);
+    }
+
+    List<String> populateLocalTypeDef( MethodVisitor mv, BIRTypeDefinition localTypeDef, String moduleClassName, SymbolTable symbolTable, int index, BIRVarToJVMIndexMap indexMap) {
+
+        List<String> funcNames = new ArrayList<>();
+        BType bType = localTypeDef.type;
+        if (!(bType.tag == TypeTags.RECORD || bType.tag == TypeTags.OBJECT || bType.tag == TypeTags.ERROR)) {
+            return funcNames;
+        }
+
+        switch (bType.tag) {
+                case TypeTags.RECORD:
+                    BRecordType recordType = (BRecordType) bType;
+                    mv.visitVarInsn(ALOAD, index);
+                    mv.visitInsn(DUP);
+                    addRecordFields(mv, recordType.fields);
+                    addRecordRestField(mv, recordType.restFieldType);
+                    addImmutableType(mv, recordType);
+                    break;
+                case TypeTags.OBJECT:
+                    if (bType instanceof BServiceType) {
+                        BServiceType serviceType = (BServiceType) bType;
+                        mv.visitTypeInsn(CHECKCAST, OBJECT_TYPE);
+                        mv.visitInsn(DUP);
+                        addObjectFields(mv, serviceType.fields);
+                        addObjectAttachedFunctions(mv, ((BObjectTypeSymbol) serviceType.tsymbol).attachedFuncs,
+                                serviceType, indexMap, symbolTable);
+                    } else {
+                        BObjectType objectType = (BObjectType) bType;
+                        mv.visitVarInsn(ALOAD, index);
+                        mv.visitInsn(DUP);
+                        addObjectFields(mv, objectType.fields);
+                        BObjectTypeSymbol objectTypeSymbol = (BObjectTypeSymbol) objectType.tsymbol;
+                        addObjectInitFunction(mv, objectTypeSymbol.generatedInitializerFunc, objectType, indexMap,
+                                "$init$", "setGeneratedInitializer", symbolTable);
+                        addObjectInitFunction(mv, objectTypeSymbol.initializerFunc, objectType, indexMap, "init",
+                                "setInitializer", symbolTable);
+                        addObjectAttachedFunctions(mv, objectTypeSymbol.attachedFuncs, objectType, indexMap,
+                                symbolTable);
+                        addImmutableType(mv, objectType);
+                    }
+                    break;
+        }
+    return funcNames;
+    }
+
+    private void addImmutableType(MethodVisitor mv, BStructureType structureType) {
         BIntersectionType immutableType = ((SelectivelyImmutableReferenceType) structureType).getImmutableType();
         if (immutableType == null) {
             return;
@@ -1611,7 +1656,13 @@ public class JvmTypeGen {
                         MODULE_INIT_CLASS_NAME;
         String fieldName = getTypeFieldName(toNameString(bType));
 
-        mv.visitFieldInsn(GETSTATIC, typeOwner, fieldName, String.format("L%s;", BTYPE));
+        if(unMask(bType.flags).contains(Flag.LOCAL)) {
+            BIRVariableDcl typeVar = convertLocalTypeDefNameToBIRVar(bType, new Name(toNameString(bType)));
+            int index = indexMap.getIndex(typeVar);
+                mv.visitVarInsn(ALOAD, index);
+        } else {
+            mv.visitFieldInsn(GETSTATIC, typeOwner, fieldName, String.format("L%s;", BTYPE));
+        }
     }
 
     /**
