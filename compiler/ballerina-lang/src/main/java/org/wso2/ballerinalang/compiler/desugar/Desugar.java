@@ -195,6 +195,7 @@ import org.wso2.ballerinalang.compiler.tree.statements.BLangExpressionStmt;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangForeach;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangForkJoin;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangIf;
+import org.wso2.ballerinalang.compiler.tree.statements.BLangLocalTypeDefinition;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock.BLangLockStmt;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock.BLangUnLockStmt;
@@ -422,6 +423,39 @@ public class Desugar extends BLangNodeVisitor {
                         env);
                 pkgNode.functions.add(recordTypeNode.initFunction);
                 pkgNode.topLevelNodes.add(recordTypeNode.initFunction);
+            }
+        }
+    }
+
+    private void addAttachedFunctionsToPackageLevel(BLangLocalTypeDefinition typeDef, SymbolEnv env) {
+        if (typeDef.symbol.tag == SymTag.OBJECT) {
+            BLangObjectTypeNode objectTypeNode = (BLangObjectTypeNode) typeDef.typeNode;
+
+            objectTypeNode.functions.forEach(f -> {
+                if (!env.enclPkg.objAttachedFunctions.contains(f.symbol)) {
+                    env.enclPkg.functions.add(f);
+                    env.enclPkg.topLevelNodes.add(f);
+                }
+            });
+
+            if (objectTypeNode.flagSet.contains(Flag.ABSTRACT)) {
+                return;
+            }
+
+            BLangFunction tempGeneratedInitFunction = createGeneratedInitializerFunction(objectTypeNode, env);
+            tempGeneratedInitFunction.clonedEnv = SymbolEnv.createFunctionEnv(tempGeneratedInitFunction,
+                    tempGeneratedInitFunction.symbol.scope, env);
+            this.semanticAnalyzer.analyzeNode(tempGeneratedInitFunction, env);
+            objectTypeNode.generatedInitFunction = tempGeneratedInitFunction;
+
+            // Add generated init function to the attached function list
+            env.enclPkg.functions.add(objectTypeNode.generatedInitFunction);
+            env.enclPkg.topLevelNodes.add(objectTypeNode.generatedInitFunction);
+
+            // Add init function to the attached function list
+            if (objectTypeNode.initFunction != null) {
+                env.enclPkg.functions.add(objectTypeNode.initFunction);
+                env.enclPkg.topLevelNodes.add(objectTypeNode.initFunction);
             }
         }
     }
@@ -728,6 +762,19 @@ public class Desugar extends BLangNodeVisitor {
 
         typeDef.annAttachments.forEach(attachment ->  rewrite(attachment, env));
         result = typeDef;
+    }
+
+    public void visit(BLangLocalTypeDefinition localTypeDefinition) {
+        if (localTypeDefinition.typeNode.getKind() == NodeKind.OBJECT_TYPE) {
+            addAttachedFunctionsToPackageLevel(localTypeDefinition, env);
+        }
+        if (localTypeDefinition.typeNode.getKind() == NodeKind.OBJECT_TYPE
+                || localTypeDefinition.typeNode.getKind() == NodeKind.RECORD_TYPE) {
+            localTypeDefinition.typeNode = rewrite(localTypeDefinition.typeNode, env);
+        }
+
+        localTypeDefinition.annAttachments.forEach(attachment ->  rewrite(attachment, env));
+        result = localTypeDefinition;
     }
 
     @Override
