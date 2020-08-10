@@ -120,9 +120,7 @@ import static org.objectweb.asm.Opcodes.NEWARRAY;
 import static org.objectweb.asm.Opcodes.PUTSTATIC;
 import static org.objectweb.asm.Opcodes.T_INT;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmCastGen.generateCast;
-import static org.wso2.ballerinalang.compiler.bir.codegen.JvmCastGen.generateCheckCast;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmCastGen.generateCheckCastToByte;
-import static org.wso2.ballerinalang.compiler.bir.codegen.JvmCastGen.generatePlatformCheckCast;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmCastGen.getTargetClass;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.ANNOTATION_MAP_NAME;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.ANNOTATION_UTILS;
@@ -170,9 +168,7 @@ import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.XML_QNAME
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmConstants.XML_VALUE;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmPackageGen.getPackageName;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTerminatorGen.toNameString;
-import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTypeGen.duplicateServiceTypeWithAnnots;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTypeGen.getTypeDesc;
-import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTypeGen.loadType;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmValueGen.getTypeDescClassName;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmValueGen.getTypeValueClassName;
 
@@ -191,9 +187,11 @@ public class JvmInstructionGen {
     private BIRNode.BIRPackage currentPackage;
     private JvmPackageGen jvmPackageGen;
     private SymbolTable symbolTable;
+    private JvmTypeGen typeGen;
+    private JvmCastGen castGen;
 
     public JvmInstructionGen(MethodVisitor mv, BIRVarToJVMIndexMap indexMap, BIRNode.BIRPackage currentPackage,
-                             JvmPackageGen jvmPackageGen) {
+                             JvmPackageGen jvmPackageGen, JvmTypeGen typeGen, JvmCastGen castGen) {
 
         this.mv = mv;
         this.indexMap = indexMap;
@@ -202,6 +200,8 @@ public class JvmInstructionGen {
         this.symbolTable = jvmPackageGen.symbolTable;
         this.currentPackageName = getPackageName(currentPackage.org.value, currentPackage.name.value,
                                                  currentPackage.version.value);
+        this.typeGen = typeGen;
+        this.castGen = castGen;
     }
 
     static void addBoxInsn(MethodVisitor mv, BType bType) {
@@ -654,7 +654,7 @@ public class JvmInstructionGen {
             JCast castIns = (JCast) ins;
             BType targetType = castIns.targetType;
             this.loadVar(castIns.rhsOp.variableDcl);
-            generatePlatformCheckCast(this.mv, this.indexMap, castIns.rhsOp.variableDcl.type, targetType);
+            this.castGen.generatePlatformCheckCast(this.mv, this.indexMap, castIns.rhsOp.variableDcl.type, targetType);
             this.storeToVar(castIns.lhsOp.variableDcl);
         }
     }
@@ -1163,10 +1163,10 @@ public class JvmInstructionGen {
         }
 
         this.loadVar(binaryIns.rhsOp1.variableDcl);
-        generateCheckCast(this.mv, opType1, symbolTable.intType, this.indexMap);
+        this.castGen.generateCheckCast(this.mv, opType1, symbolTable.intType, this.indexMap);
 
         this.loadVar(binaryIns.rhsOp2.variableDcl);
-        generateCheckCast(this.mv, opType2, symbolTable.intType, this.indexMap);
+        this.castGen.generateCheckCast(this.mv, opType2, symbolTable.intType, this.indexMap);
 
         this.mv.visitInsn(LOR);
 
@@ -1192,10 +1192,10 @@ public class JvmInstructionGen {
         }
 
         this.loadVar(binaryIns.rhsOp1.variableDcl);
-        generateCheckCast(this.mv, opType1, symbolTable.intType, this.indexMap);
+        this.castGen.generateCheckCast(this.mv, opType1, symbolTable.intType, this.indexMap);
 
         this.loadVar(binaryIns.rhsOp2.variableDcl);
-        generateCheckCast(this.mv, opType2, symbolTable.intType, this.indexMap);
+        this.castGen.generateCheckCast(this.mv, opType2, symbolTable.intType, this.indexMap);
 
         this.mv.visitInsn(LXOR);
 
@@ -1457,7 +1457,7 @@ public class JvmInstructionGen {
         if (inst.type.tag == TypeTags.ARRAY) {
             this.mv.visitTypeInsn(NEW, ARRAY_VALUE_IMPL);
             this.mv.visitInsn(DUP);
-            loadType(this.mv, inst.type);
+            this.typeGen.loadType(this.mv, inst.type);
             this.loadVar(inst.sizeOp.variableDcl);
             loadListInitialValues(inst);
             this.mv.visitMethodInsn(INVOKESPECIAL, ARRAY_VALUE_IMPL, "<init>",
@@ -1466,7 +1466,7 @@ public class JvmInstructionGen {
         } else {
             this.mv.visitTypeInsn(NEW, TUPLE_VALUE_IMPL);
             this.mv.visitInsn(DUP);
-            loadType(this.mv, inst.type);
+            this.typeGen.loadType(this.mv, inst.type);
             this.loadVar(inst.sizeOp.variableDcl);
             loadListInitialValues(inst);
             this.mv.visitMethodInsn(INVOKESPECIAL, TUPLE_VALUE_IMPL, "<init>",
@@ -1553,7 +1553,7 @@ public class JvmInstructionGen {
 
         this.mv.visitTypeInsn(NEW, TABLE_VALUE_IMPL);
         this.mv.visitInsn(DUP);
-        loadType(this.mv, inst.type);
+        this.typeGen.loadType(this.mv, inst.type);
         this.loadVar(inst.dataOp.variableDcl);
         this.loadVar(inst.keyColOp.variableDcl);
         this.mv.visitMethodInsn(INVOKESPECIAL, TABLE_VALUE_IMPL, "<init>",
@@ -1601,7 +1601,7 @@ public class JvmInstructionGen {
         this.mv.visitTypeInsn(NEW, ERROR_VALUE);
         this.mv.visitInsn(DUP);
         // load errorType
-        loadType(this.mv, newErrorIns.type);
+        this.typeGen.loadType(this.mv, newErrorIns.type);
         this.loadVar(newErrorIns.messageOp.variableDcl);
         this.loadVar(newErrorIns.causeOp.variableDcl);
         this.loadVar(newErrorIns.detailOp.variableDcl);
@@ -1617,7 +1617,7 @@ public class JvmInstructionGen {
         // load source value
         this.loadVar(typeCastIns.rhsOp.variableDcl);
         if (typeCastIns.checkTypes) {
-            generateCheckCast(this.mv, typeCastIns.rhsOp.variableDcl.type, typeCastIns.type, this.indexMap);
+            this.castGen.generateCheckCast(this.mv, typeCastIns.rhsOp.variableDcl.type, typeCastIns.type, this.indexMap);
         } else {
             generateCast(this.mv, typeCastIns.rhsOp.variableDcl.type, typeCastIns.type);
         }
@@ -1629,7 +1629,7 @@ public class JvmInstructionGen {
         this.loadVar(typeTestIns.rhsOp.variableDcl);
 
         // load targetType
-        loadType(this.mv, typeTestIns.type);
+        this.typeGen.loadType(this.mv, typeTestIns.type);
 
         this.mv.visitMethodInsn(INVOKESTATIC, TYPE_CHECKER, "checkIsType",
                 String.format("(L%s;L%s;)Z", OBJECT, BTYPE), false);
@@ -1641,7 +1641,7 @@ public class JvmInstructionGen {
         this.loadVar(isLike.rhsOp.variableDcl);
 
         // load targetType
-        loadType(this.mv, isLike.type);
+        this.typeGen.loadType(this.mv, isLike.type);
 
         this.mv.visitMethodInsn(INVOKESTATIC, TYPE_CHECKER, "checkIsLikeType",
                 String.format("(L%s;L%s;)Z", OBJECT, BTYPE), false);
@@ -1666,9 +1666,9 @@ public class JvmInstructionGen {
             String pkgClassName = currentPackageName.equals(".") || currentPackageName.equals("") ?
                     MODULE_INIT_CLASS_NAME : jvmPackageGen.lookupGlobalVarClassName(currentPackageName,
                     ANNOTATION_MAP_NAME);
-            duplicateServiceTypeWithAnnots(this.mv, (BObjectType) type, pkgClassName, strandIndex);
+            this.typeGen.duplicateServiceTypeWithAnnots(this.mv, (BObjectType) type, pkgClassName, strandIndex);
         } else {
-            loadType(mv, type);
+            this.typeGen.loadType(mv, type);
         }
         this.mv.visitTypeInsn(CHECKCAST, OBJECT_TYPE);
         this.mv.visitMethodInsn(INVOKESPECIAL, className, "<init>", String.format("(L%s;)V", OBJECT_TYPE), false);
@@ -1696,7 +1696,7 @@ public class JvmInstructionGen {
         }
 
         visitInvokeDyn(mv, asyncDataCollector.getEnclosingClass(), lambdaName, inst.closureMaps.size());
-        loadType(this.mv, returnType);
+        this.typeGen.loadType(this.mv, returnType);
         if (inst.strandName != null) {
             mv.visitLdcInsn(inst.strandName);
         } else {
@@ -1934,7 +1934,7 @@ public class JvmInstructionGen {
         }
         this.mv.visitTypeInsn(NEW, className);
         this.mv.visitInsn(DUP);
-        loadType(this.mv, newTypeDesc.type);
+        this.typeGen.loadType(this.mv, newTypeDesc.type);
 
 
         List<BIROperand> closureVars = newTypeDesc.closureVars;

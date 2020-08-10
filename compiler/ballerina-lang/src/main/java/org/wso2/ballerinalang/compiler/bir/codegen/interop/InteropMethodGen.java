@@ -151,11 +151,13 @@ public class InteropMethodGen {
         int access = ACC_PUBLIC + ACC_STATIC;
 
         MethodVisitor mv = classWriter.visitMethod(access, birFunc.name.value, desc, null, null);
-        JvmInstructionGen instGen = new JvmInstructionGen(mv, indexMap, birModule, jvmPackageGen);
+        JvmTypeGen typeGen = new JvmTypeGen(indexMap);
+        JvmCastGen castGen = new JvmCastGen(typeGen);
+        JvmInstructionGen instGen = new JvmInstructionGen(mv, indexMap, birModule, jvmPackageGen, typeGen, castGen);
         JvmErrorGen errorGen = new JvmErrorGen(mv, indexMap, currentPackageName, instGen);
         LabelGenerator labelGen = new LabelGenerator();
         JvmTerminatorGen termGen = new JvmTerminatorGen(mv, indexMap, labelGen, errorGen, birModule, instGen,
-                jvmPackageGen);
+                jvmPackageGen, typeGen);
         mv.visitCode();
 
         Label paramLoadLabel = labelGen.getLabel("param_load");
@@ -200,7 +202,7 @@ public class InteropMethodGen {
             List<BIRBasicBlock> basicBlocks = birFunc.parameters.get(birFuncParam);
             jvmMethodGen.generateBasicBlocks(mv, basicBlocks, labelGen, errorGen, instGen, termGen, birFunc, -1, -1,
                                              strandParamIndex, true, birModule, null, moduleClassName,
-                                             asyncDataCollector);
+                                             asyncDataCollector, typeGen);
 
             mv.visitLabel(paramNextLabel);
 

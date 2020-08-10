@@ -140,7 +140,6 @@ import static org.wso2.ballerinalang.compiler.bir.codegen.JvmMethodGen.getVariab
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmMethodGen.loadDefaultValue;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmPackageGen.getModuleLevelClassName;
 import static org.wso2.ballerinalang.compiler.bir.codegen.JvmPackageGen.getPackageName;
-import static org.wso2.ballerinalang.compiler.bir.codegen.JvmTypeGen.loadType;
 import static org.wso2.ballerinalang.compiler.bir.codegen.interop.ExternalMethodGen.isBallerinaBuiltinModule;
 import static org.wso2.ballerinalang.compiler.bir.codegen.interop.InteropMethodGen.genVarArg;
 
@@ -161,10 +160,11 @@ public class JvmTerminatorGen {
     private PackageCache packageCache;
     private SymbolTable symbolTable;
     private ResolvedTypeBuilder typeBuilder;
+    private JvmTypeGen jvmTypeGen;
 
     public JvmTerminatorGen(MethodVisitor mv, BIRVarToJVMIndexMap indexMap, LabelGenerator labelGen,
                             JvmErrorGen errorGen, BIRNode.BIRPackage module, JvmInstructionGen jvmInstructionGen,
-                            JvmPackageGen jvmPackageGen) {
+                            JvmPackageGen jvmPackageGen, JvmTypeGen typeGen) {
 
         this.mv = mv;
         this.indexMap = indexMap;
@@ -176,6 +176,7 @@ public class JvmTerminatorGen {
         this.symbolTable = jvmPackageGen.symbolTable;
         this.currentPackageName = getPackageName(module.org.value, module.name.value, module.version.value);
         this.typeBuilder = new ResolvedTypeBuilder();
+        this.jvmTypeGen = typeGen;
     }
 
     private static void genYieldCheckForLock(MethodVisitor mv, LabelGenerator labelGen, String funcName,
@@ -1184,7 +1185,7 @@ public class JvmTerminatorGen {
             returnType = ((BFutureType) futureType).constraint;
         }
         // load strand
-        loadType(this.mv, returnType);
+        this.jvmTypeGen.loadType(this.mv, returnType);
     }
 
     private int getJVMIndexOfVarRef(BIRNode.BIRVariableDcl varDcl) {

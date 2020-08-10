@@ -179,7 +179,15 @@ import static org.wso2.ballerinalang.compiler.bir.codegen.JvmValueGen.getTypeVal
  *
  * @since 1.2.0
  */
-class JvmTypeGen {
+public class JvmTypeGen {
+
+
+    private BIRVarToJVMIndexMap indexMap;
+
+    public JvmTypeGen(BIRVarToJVMIndexMap indexMap) {
+
+        this.indexMap = indexMap;
+    }
 
     /**
      * Create static fields to hold the user defined types.
@@ -260,7 +268,7 @@ class JvmTypeGen {
         mv.visitEnd();
     }
 
-    private static List<String> populateTypes(ClassWriter cw, List<BIRTypeDefinition> typeDefs, String typeOwnerClass,
+    List<String> populateTypes(ClassWriter cw, List<BIRTypeDefinition> typeDefs, String typeOwnerClass,
                                               SymbolTable symbolTable) {
 
         List<String> funcNames = new ArrayList<>();
@@ -665,7 +673,7 @@ class JvmTypeGen {
      * @param mv     method visitor
      * @param fields record fields to be added
      */
-    private static void addRecordFields(MethodVisitor mv, Map<String, BField> fields) {
+    private void addRecordFields(MethodVisitor mv, Map<String, BField> fields) {
         // Create the fields map
         mv.visitTypeInsn(NEW, LINKED_HASH_MAP);
         mv.visitInsn(DUP);
@@ -700,7 +708,7 @@ class JvmTypeGen {
      * @param mv    method visitor
      * @param field field Parameter Description
      */
-    private static void createRecordField(MethodVisitor mv, BField field) {
+    private void createRecordField(MethodVisitor mv, BField field) {
 
         mv.visitTypeInsn(NEW, BFIELD);
         mv.visitInsn(DUP);
@@ -731,7 +739,7 @@ class JvmTypeGen {
      * @param mv            method visitor
      * @param restFieldType type of the rest field
      */
-    private static void addRecordRestField(MethodVisitor mv, BType restFieldType) {
+    private void addRecordRestField(MethodVisitor mv, BType restFieldType) {
         // Load the rest field type
         loadType(mv, restFieldType);
         mv.visitFieldInsn(PUTFIELD, RECORD_TYPE, "restFieldType", String.format("L%s;", BTYPE));
@@ -812,7 +820,7 @@ class JvmTypeGen {
                 String.format("(L%s;L%s;I)V", STRING_VALUE, PACKAGE_TYPE), false);
     }
 
-    static void duplicateServiceTypeWithAnnots(MethodVisitor mv, BObjectType objectType, String pkgClassName,
+    void duplicateServiceTypeWithAnnots(MethodVisitor mv, BObjectType objectType, String pkgClassName,
                                                int strandIndex) {
 
         createServiceType(mv, objectType);
@@ -854,7 +862,7 @@ class JvmTypeGen {
      * @param mv     method visitor
      * @param fields object fields to be added
      */
-    private static void addObjectFields(MethodVisitor mv, Map<String, BField> fields) {
+    private void addObjectFields(MethodVisitor mv, Map<String, BField> fields) {
         // Create the fields map
         mv.visitTypeInsn(NEW, LINKED_HASH_MAP);
         mv.visitInsn(DUP);
@@ -889,7 +897,7 @@ class JvmTypeGen {
      * @param mv    method visitor
      * @param field object field
      */
-    private static void createObjectField(MethodVisitor mv, BField field) {
+    private void createObjectField(MethodVisitor mv, BField field) {
 
         mv.visitTypeInsn(NEW, BFIELD);
         mv.visitInsn(DUP);
@@ -917,7 +925,7 @@ class JvmTypeGen {
      * @param objType           object type to be used to create attached functions
      * @param indexMap          jvm index generation map for function generation
      */
-    private static void addObjectAttachedFunctions(MethodVisitor mv, List<BAttachedFunction> attachedFunctions,
+    private void addObjectAttachedFunctions(MethodVisitor mv, List<BAttachedFunction> attachedFunctions,
                                                    BObjectType objType, BIRVarToJVMIndexMap indexMap,
                                                    SymbolTable symbolTable) {
         // Create the attached function array
@@ -952,7 +960,7 @@ class JvmTypeGen {
                 String.format("([L%s;)V", ATTACHED_FUNCTION), false);
     }
 
-    private static void addObjectInitFunction(MethodVisitor mv, BAttachedFunction initFunction,
+    private void addObjectInitFunction(MethodVisitor mv, BAttachedFunction initFunction,
                                               BObjectType objType, BIRVarToJVMIndexMap indexMap, String funcName,
                                               String initializerFuncName, SymbolTable symbolTable) {
 
@@ -981,7 +989,7 @@ class JvmTypeGen {
      * @param attachedFunc object attached function
      * @param objType      object type used for creating the attached function
      */
-    private static void createObjectAttachedFunction(MethodVisitor mv, BAttachedFunction attachedFunc,
+    private void createObjectAttachedFunction(MethodVisitor mv, BAttachedFunction attachedFunc,
                                                      BObjectType objType) {
 
         mv.visitTypeInsn(NEW, ATTACHED_FUNCTION);
@@ -1042,7 +1050,7 @@ class JvmTypeGen {
     //              Type loading methods
     // -------------------------------------------------------
 
-    static void loadLocalType(MethodVisitor mv, BIRTypeDefinition typeDefinition) {
+    void loadLocalType(MethodVisitor mv, BIRTypeDefinition typeDefinition) {
 
         loadType(mv, typeDefinition.type);
     }
@@ -1054,7 +1062,7 @@ class JvmTypeGen {
      * @param mv    method visitor
      * @param bType type to load
      */
-    static void loadType(MethodVisitor mv, BType bType) {
+    void loadType(MethodVisitor mv, BType bType) {
 
         String typeFieldName = "";
         if (bType == null || bType.tag == TypeTags.NIL) {
@@ -1137,13 +1145,13 @@ class JvmTypeGen {
                 case TypeTags.OBJECT:
                     if (bType instanceof BServiceType) {
                         if (!Objects.equals(getTypeFieldName(toNameString(bType)), "$type$service")) {
-                            loadUserDefinedType(mv, bType);
+                            loadUserDefinedType(mv, bType, this.indexMap);
                             return;
                         } else {
                             typeFieldName = "typeAnyService";
                         }
                     } else if (bType instanceof BObjectType) {
-                        loadUserDefinedType(mv, bType);
+                        loadUserDefinedType(mv, bType, this.indexMap);
                         return;
                     }
                     break;
@@ -1172,7 +1180,7 @@ class JvmTypeGen {
                     loadIntersectionType(mv, (BIntersectionType) bType);
                     return;
                 case TypeTags.RECORD:
-                    loadUserDefinedType(mv, bType);
+                    loadUserDefinedType(mv, bType, this.indexMap);
                     return;
                 case TypeTags.INVOKABLE:
                     loadInvokableType(mv, (BInvokableType) bType);
@@ -1208,7 +1216,7 @@ class JvmTypeGen {
      * @param mv    method visitor
      * @param bType array type to load
      */
-    private static void loadArrayType(MethodVisitor mv, BArrayType bType) {
+    private void loadArrayType(MethodVisitor mv, BArrayType bType) {
         // Create an new array type
         mv.visitTypeInsn(NEW, ARRAY_TYPE);
         mv.visitInsn(DUP);
@@ -1233,7 +1241,7 @@ class JvmTypeGen {
      * @param mv    method visitor
      * @param bType typedesc type to load
      */
-    private static void loadTypedescType(MethodVisitor mv, BTypedescType bType) {
+    private void loadTypedescType(MethodVisitor mv, BTypedescType bType) {
         // Create an new map type
         mv.visitTypeInsn(NEW, TYPEDESC_TYPE);
         mv.visitInsn(DUP);
@@ -1252,7 +1260,7 @@ class JvmTypeGen {
      * @param mv    method visitor
      * @param bType map type to load
      */
-    private static void loadMapType(MethodVisitor mv, BMapType bType) {
+    private void loadMapType(MethodVisitor mv, BMapType bType) {
         // Create an new map type
         mv.visitTypeInsn(NEW, MAP_TYPE);
         mv.visitInsn(DUP);
@@ -1281,7 +1289,7 @@ class JvmTypeGen {
      * @param mv    method visitor
      * @param bType xml type to load
      */
-    private static void loadXmlType(MethodVisitor mv, BXMLType bType) {
+    private void loadXmlType(MethodVisitor mv, BXMLType bType) {
         // Create an new xml type
         mv.visitTypeInsn(NEW, XML_TYPE);
         mv.visitInsn(DUP);
@@ -1302,7 +1310,7 @@ class JvmTypeGen {
      * @param mv    method visitor
      * @param bType table type to load
      */
-    private static void loadTableType(MethodVisitor mv, BTableType bType) {
+    private void loadTableType(MethodVisitor mv, BTableType bType) {
         // Create an new table type
         mv.visitTypeInsn(NEW, TABLE_TYPE);
         mv.visitInsn(DUP);
@@ -1338,7 +1346,7 @@ class JvmTypeGen {
         }
     }
 
-    private static void loadStreamType(MethodVisitor mv, BStreamType bType) {
+    private void loadStreamType(MethodVisitor mv, BStreamType bType) {
         // Create an new stream type
         mv.visitTypeInsn(NEW, STREAM_TYPE);
         mv.visitInsn(DUP);
@@ -1379,7 +1387,7 @@ class JvmTypeGen {
      * @param mv    method visitor
      * @param bType union type to load
      */
-    private static void loadUnionType(MethodVisitor mv, BUnionType bType) {
+    private void loadUnionType(MethodVisitor mv, BUnionType bType) {
         // Create the union type
         mv.visitTypeInsn(NEW, UNION_TYPE);
         mv.visitInsn(DUP);
@@ -1419,7 +1427,7 @@ class JvmTypeGen {
      * @param mv    method visitor
      * @param bType intersection type to load
      */
-    private static void loadIntersectionType(MethodVisitor mv, BIntersectionType bType) {
+    private void loadIntersectionType(MethodVisitor mv, BIntersectionType bType) {
         // Create the intersection type
         mv.visitTypeInsn(NEW, INTERSECTION_TYPE);
         mv.visitInsn(DUP);
@@ -1473,7 +1481,7 @@ class JvmTypeGen {
      * @param mv    method visitor
      * @param bType tuple type to be loaded
      */
-    private static void loadTupleType(MethodVisitor mv, BTupleType bType) {
+    private void loadTupleType(MethodVisitor mv, BTupleType bType) {
 
         mv.visitTypeInsn(NEW, TUPLE_TYPE);
         mv.visitInsn(DUP);
@@ -1512,7 +1520,7 @@ class JvmTypeGen {
      * @param mv    method visitor
      * @param bType user defined type
      */
-    private static void loadUserDefinedType(MethodVisitor mv, BType bType) {
+    private static void loadUserDefinedType(MethodVisitor mv, BType bType, BIRVarToJVMIndexMap indexMap) {
 
         PackageID packageID = bType.tsymbol.pkgID;
 
@@ -1530,12 +1538,12 @@ class JvmTypeGen {
      * @param typeName type name
      * @return name of the field that holds the type instance
      */
-    private static String getTypeFieldName(String typeName) {
+    static String getTypeFieldName(String typeName) {
 
         return String.format("$type$%s", cleanupTypeName(typeName));
     }
 
-    private static void loadFutureType(MethodVisitor mv, BFutureType bType) {
+    private void loadFutureType(MethodVisitor mv, BFutureType bType) {
 
         mv.visitTypeInsn(NEW, FUTURE_TYPE);
         mv.visitInsn(DUP);
@@ -1550,7 +1558,7 @@ class JvmTypeGen {
      * @param mv    method visitor
      * @param bType invokable type to be created
      */
-    private static void loadInvokableType(MethodVisitor mv, BInvokableType bType) {
+    private void loadInvokableType(MethodVisitor mv, BInvokableType bType) {
 
         mv.visitTypeInsn(NEW, FUNCTION_TYPE);
         mv.visitInsn(DUP);

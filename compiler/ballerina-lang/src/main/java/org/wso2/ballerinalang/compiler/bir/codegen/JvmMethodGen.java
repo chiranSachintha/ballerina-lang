@@ -743,7 +743,7 @@ public class JvmMethodGen {
 
     private static void loadCLIArgsForMain(MethodVisitor mv, List<BIRFunctionParameter> params,
                                            boolean hasRestParam,
-                                           List<BIRAnnotationAttachment> annotAttachments) {
+                                           List<BIRAnnotationAttachment> annotAttachments, JvmTypeGen typeGen) {
 
         // get defaultable arg names from function annotation
         List<String> defaultableNames = new ArrayList<>();
@@ -783,7 +783,7 @@ public class JvmMethodGen {
                 mv.visitLdcInsn(defaultableNames.get(defaultableIndex));
                 defaultableIndex += 1;
                 // var varIndex = indexMap.getIndex(param);
-                loadType(mv, param.type);
+                typeGen.loadType(mv, param.type);
             }
             mv.visitMethodInsn(INVOKESPECIAL, String.format("%s$ParamInfo", RUNTIME_UTILS), "<init>",
                     String.format("(ZL%s;L%s;)V", STRING_VALUE, BTYPE), false);
@@ -871,7 +871,7 @@ public class JvmMethodGen {
 
     private static void scheduleStopMethod(MethodVisitor mv, String initClass, String stopFuncName,
                                            int schedulerIndex, int futureIndex, String moduleClass,
-                                           AsyncDataCollector asyncDataCollector) {
+                                           AsyncDataCollector asyncDataCollector, JvmTypeGen typeGen) {
 
         String lambdaFuncName = "$lambda$" + stopFuncName;
         // Create a schedular. A new schedular is used here, to make the stop function to not to
@@ -890,7 +890,7 @@ public class JvmMethodGen {
 
         // no parent strand
         mv.visitInsn(ACONST_NULL);
-        loadType(mv, new BNilType());
+        typeGen.loadType(mv, new BNilType());
         submitToScheduler(mv, initClass, "stop", asyncDataCollector);
         mv.visitVarInsn(ASTORE, futureIndex);
 
@@ -1699,7 +1699,9 @@ public class JvmMethodGen {
         }
 
         MethodVisitor mv = cw.visitMethod(access, funcName, desc, null, null);
-        JvmInstructionGen instGen = new JvmInstructionGen(mv, indexMap, module, jvmPackageGen);
+        JvmTypeGen typeGen = new JvmTypeGen(indexMap);
+        JvmCastGen castGen = new JvmCastGen(typeGen);
+        JvmInstructionGen instGen = new JvmInstructionGen(mv, indexMap, module, jvmPackageGen, typeGen, castGen);
         JvmErrorGen errorGen = new JvmErrorGen(mv, indexMap, currentPackageName, instGen);
         LabelGenerator labelGen = new LabelGenerator();
 
@@ -1788,7 +1790,7 @@ public class JvmMethodGen {
         }
 
         JvmTerminatorGen termGen = new JvmTerminatorGen(mv, indexMap, labelGen, errorGen, module, instGen,
-                jvmPackageGen);
+                jvmPackageGen, typeGen);
 
         // uncomment to test yield
         // mv.visitFieldInsn(GETSTATIC, className, "i", "I");
@@ -1807,7 +1809,7 @@ public class JvmMethodGen {
 
         generateBasicBlocks(mv, basicBlocks, labelGen, errorGen, instGen, termGen, func, returnVarRefIndex,
                             stateVarIndex, localVarOffset, false, module, attachedType,
-                            moduleClassName, asyncDataCollector);
+                            moduleClassName, asyncDataCollector, typeGen);
 
         String frameName = getFrameClassName(currentPackageName, funcName, attachedType);
         mv.visitLabel(resumeLable);
@@ -1907,7 +1909,7 @@ public class JvmMethodGen {
                                     JvmInstructionGen instGen, JvmTerminatorGen termGen,
                                     BIRFunction func, int returnVarRefIndex, int stateVarIndex,
                                     int localVarOffset, boolean isArg, BIRPackage module, BType attachedType,
-                                    String moduleClassName, AsyncDataCollector asyncDataCollector) {
+                                    String moduleClassName, AsyncDataCollector asyncDataCollector, JvmTypeGen typeGen) {
 
         int j = 0;
         String funcName = cleanupFunctionName(func.name.value);
@@ -2084,7 +2086,7 @@ public class JvmMethodGen {
                 if ((isModuleInitFunction(module, func) || isModuleTestInitFunction(module, func)) &&
                         terminator instanceof Return) {
                     generateAnnotLoad(mv, module.typeDefs, getPackageName(module.org.value, module.name.value,
-                                                                          module.version.value));
+                                                                          module.version.value),typeGen);
                 }
                 //set module start success to true for ___init class
                 if (isModuleStartFunction(module, funcName) && terminator.kind == InstructionKind.RETURN) {
@@ -2410,6 +2412,7 @@ public class JvmMethodGen {
         registerShutdownListener(mv, initClass);
 
         BIRVarToJVMIndexMap indexMap = new BIRVarToJVMIndexMap();
+        JvmTypeGen typeGen = new JvmTypeGen(indexMap);
         // add main string[] args param first
         BIRVariableDcl argsVar = new BIRVariableDcl(symbolTable.anyType, new Name("argsdummy"), VarScope.FUNCTION,
                 VarKind.ARG);
@@ -2439,7 +2442,7 @@ public class JvmMethodGen {
             // no parent strand
             mv.visitInsn(ACONST_NULL);
             BType anyType = symbolTable.anyType;
-            loadType(mv, anyType);
+            typeGen.loadType(mv, anyType);
             // submit to scheduler
             submitToScheduler(mv, initClass, "<init>", asyncDataCollector);
             mv.visitInsn(DUP);
@@ -2464,7 +2467,7 @@ public class JvmMethodGen {
         if (userMainFunc != null) {
             mv.visitVarInsn(ALOAD, schedulerVarIndex);
             loadCLIArgsForMain(mv, new ArrayList<>(userMainFunc.parameters.keySet()), userMainFunc.restParam != null,
-                    userMainFunc.annotAttachments);
+                    userMainFunc.annotAttachments, typeGen);
 
             // invoke the user's main method
             String lambdaName = "$lambda$main$";
@@ -2475,7 +2478,7 @@ public class JvmMethodGen {
 
             //submit to the scheduler
             BType anyType = symbolTable.anyType;
-            loadType(mv, anyType);
+            typeGen.loadType(mv, anyType);
             submitToScheduler(mv, initClass, "main", asyncDataCollector);
             mv.visitInsn(DUP);
 
@@ -2503,7 +2506,7 @@ public class JvmMethodGen {
 
         if (hasInitFunction(pkg)) {
             scheduleStartMethod(mv, initClass, serviceEPAvailable, indexMap, schedulerVarIndex,
-                                asyncDataCollector);
+                                asyncDataCollector, typeGen);
         }
 
         // stop all listeners
@@ -2526,7 +2529,7 @@ public class JvmMethodGen {
 
     private void scheduleStartMethod(MethodVisitor mv, String initClass, boolean serviceEPAvailable,
                                      BIRVarToJVMIndexMap indexMap, int schedulerVarIndex,
-                                     AsyncDataCollector asyncDataCollector) {
+                                     AsyncDataCollector asyncDataCollector, JvmTypeGen typeGen) {
 
         mv.visitVarInsn(ALOAD, schedulerVarIndex);
         // schedule the start method
@@ -2541,7 +2544,7 @@ public class JvmMethodGen {
         // no parent strand
         mv.visitInsn(ACONST_NULL);
         BType anyType = symbolTable.anyType;
-        loadType(mv, anyType);
+        typeGen.loadType(mv, anyType);
         submitToScheduler(mv, initClass, "start", asyncDataCollector);
 
         mv.visitInsn(DUP);
@@ -2796,7 +2799,7 @@ public class JvmMethodGen {
         return nextLocalVar;
     }
 
-    private void generateAnnotLoad(MethodVisitor mv, List<BIRTypeDefinition> typeDefs, String pkgName) {
+    private void generateAnnotLoad(MethodVisitor mv, List<BIRTypeDefinition> typeDefs, String pkgName, JvmTypeGen typeGen) {
 
         String typePkgName = ".";
         if (!"".equals(pkgName)) {
@@ -2814,16 +2817,16 @@ public class JvmMethodGen {
                 continue;
             }
 
-            loadAnnots(mv, typePkgName, typeDef);
+            loadAnnots(mv, typePkgName, typeDef, typeGen);
         }
     }
 
-    private void loadAnnots(MethodVisitor mv, String pkgName, BIRTypeDefinition typeDef) {
+    private void loadAnnots(MethodVisitor mv, String pkgName, BIRTypeDefinition typeDef, JvmTypeGen typeGen) {
 
         String pkgClassName = pkgName.equals(".") || pkgName.equals("") ? MODULE_INIT_CLASS_NAME :
                 jvmPackageGen.lookupGlobalVarClassName(pkgName, ANNOTATION_MAP_NAME);
         mv.visitFieldInsn(GETSTATIC, pkgClassName, ANNOTATION_MAP_NAME, String.format("L%s;", MAP_VALUE));
-        loadLocalType(mv, typeDef);
+        typeGen.loadLocalType(mv, typeDef);
         mv.visitMethodInsn(INVOKESTATIC, String.format("%s", ANNOTATION_UTILS), "processAnnotations",
                 String.format("(L%s;L%s;)V", MAP_VALUE, BTYPE), false);
     }
@@ -2927,6 +2930,7 @@ public class JvmMethodGen {
         mv.visitCode();
 
         BIRVarToJVMIndexMap indexMap = new BIRVarToJVMIndexMap();
+        JvmTypeGen typeGen = new JvmTypeGen(indexMap);
 
         BIRVariableDcl argsVar = new BIRVariableDcl(symbolTable.anyType, new Name("schedulerVar"),
                 VarScope.FUNCTION, VarKind.ARG);
@@ -2950,7 +2954,7 @@ public class JvmMethodGen {
         String fullFuncName = calculateModuleSpecialFuncName(currentModId, STOP_FUNCTION_SUFFIX);
 
         scheduleStopMethod(mv, initClass, cleanupFunctionName(fullFuncName), schedulerIndex, futureIndex,
-                           moduleInitClass, asyncDataCollector);
+                           moduleInitClass, asyncDataCollector, typeGen);
         int i = imprtMods.size() - 1;
         while (i >= 0) {
             PackageID id = imprtMods.get(i);
@@ -2959,7 +2963,7 @@ public class JvmMethodGen {
             moduleInitClass = getModuleLevelClassName(id.orgName.value, id.name.value, id.version.value,
                     MODULE_INIT_CLASS_NAME);
             scheduleStopMethod(mv, initClass, cleanupFunctionName(fullFuncName), schedulerIndex,
-                               futureIndex, moduleInitClass, asyncDataCollector);
+                               futureIndex, moduleInitClass, asyncDataCollector, typeGen);
         }
         mv.visitInsn(RETURN);
         mv.visitMaxs(0, 0);
