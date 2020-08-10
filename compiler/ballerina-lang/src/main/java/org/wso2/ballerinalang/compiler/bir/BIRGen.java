@@ -143,6 +143,7 @@ import org.wso2.ballerinalang.compiler.tree.statements.BLangContinue;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangExpressionStmt;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangForkJoin;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangIf;
+import org.wso2.ballerinalang.compiler.tree.statements.BLangLocalTypeDefinition;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock.BLangLockStmt;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangLock.BLangUnLockStmt;
 import org.wso2.ballerinalang.compiler.tree.statements.BLangPanic;
@@ -419,6 +420,65 @@ public class BIRGen extends BLangNodeVisitor {
             birFunc.localVars.add(0, birFunc.returnVariable);
 
             typeDef.attachedFuncs.add(birFunc);
+        }
+    }
+
+    @Override
+    public void visit(BLangLocalTypeDefinition astLocalTypeDefinition) {
+        BIRTypeDefinition localTypeDefinition = new BIRTypeDefinition(astLocalTypeDefinition.pos,
+                astLocalTypeDefinition.symbol.name,
+                astLocalTypeDefinition.symbol.flags,
+                astLocalTypeDefinition.symbol.isLabel,
+                astLocalTypeDefinition.isBuiltinTypeDef,
+                astLocalTypeDefinition.typeNode.type,
+                new ArrayList<>());
+
+        typeDefs.put(astLocalTypeDefinition.symbol, localTypeDefinition);
+        this.env.enclFunc.localTypeDefs.add(localTypeDefinition);
+
+        if (astLocalTypeDefinition.typeNode.getKind() == NodeKind.RECORD_TYPE ||
+                astLocalTypeDefinition.typeNode.getKind() == NodeKind.OBJECT_TYPE) {
+            BLangStructureTypeNode typeNode = (BLangStructureTypeNode) astLocalTypeDefinition.typeNode;
+            for (BLangType typeRef : typeNode.typeRefs) {
+                localTypeDefinition.referencedTypes.add(typeRef.type);
+            }
+        }
+
+        // Write referenced functions, if this is an abstract-object
+        if (astLocalTypeDefinition.symbol.tag != SymTag.OBJECT ||
+                !Symbols.isFlagOn(astLocalTypeDefinition.symbol.flags, Flags.ABSTRACT)) {
+            return;
+        }
+
+        for (BAttachedFunction func : ((BObjectTypeSymbol) astLocalTypeDefinition.symbol).referencedFunctions) {
+            if (!Symbols.isFlagOn(func.symbol.flags, Flags.INTERFACE)) {
+                return;
+            }
+
+            BInvokableSymbol funcSymbol = func.symbol;
+            BIRFunction birFunc = new BIRFunction(astLocalTypeDefinition.pos, func.funcName, funcSymbol.flags, func.type,
+                    names.fromString(DEFAULT_WORKER_NAME), 0, new TaintTable());
+
+            if (funcSymbol.receiverSymbol != null) {
+                birFunc.receiver = getSelf(funcSymbol.receiverSymbol, funcSymbol.receiverSymbol.type,
+                        funcSymbol.receiverSymbol.name);
+            }
+
+            birFunc.setMarkdownDocAttachment(funcSymbol.markdownDocumentation);
+
+            int defaultableParamsCount = 0;
+            birFunc.argsCount = funcSymbol.params.size() + defaultableParamsCount +
+                    (funcSymbol.restParam != null ? 1 : 0);
+            funcSymbol.params.forEach(requiredParam -> addParam(birFunc, requiredParam, astLocalTypeDefinition.pos));
+            if (funcSymbol.restParam != null) {
+                addRestParam(birFunc, funcSymbol.restParam, astLocalTypeDefinition.pos);
+            }
+
+            birFunc.returnVariable = new BIRVariableDcl(astLocalTypeDefinition.pos, funcSymbol.retType,
+                    this.env.nextLocalVarId(names), VarScope.FUNCTION, VarKind.RETURN, null);
+            birFunc.localVars.add(0, birFunc.returnVariable);
+
+            localTypeDefinition.attachedFuncs.add(birFunc);
         }
     }
 

@@ -105,6 +105,10 @@ public class BIROptimizer {
                 addErrorTableDependency(errorEntry);
             }
 
+            for (BIRNode.BIRTypeDefinition birTypeDefinition : birFunction.localTypeDefs) {
+                birTypeDefinition.attachedFuncs.forEach(func -> func.accept(this));
+            }
+
             // First add all the instructions within the function to a list.
             // This is done since the order of bb's cannot be guaranteed.
             birFunction.parameters.values().forEach(paramBBs -> addDependency(paramBBs));

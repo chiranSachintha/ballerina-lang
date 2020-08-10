@@ -293,6 +293,11 @@ public abstract class BIRNode {
         public BIRVariableDcl returnVariable;
 
         /**
+         * List of local type definitions in this function.
+         */
+        public List<BIRTypeDefinition> localTypeDefs = new ArrayList<>();
+
+        /**
          * Variable used for parameters of this function.
          */
         public Map<BIRFunctionParameter, List<BIRBasicBlock>>  parameters;
