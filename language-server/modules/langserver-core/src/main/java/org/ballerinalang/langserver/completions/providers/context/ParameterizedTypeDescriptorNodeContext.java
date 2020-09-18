@@ -19,7 +19,6 @@ import io.ballerinalang.compiler.syntax.tree.AnnotationNode;
 import io.ballerinalang.compiler.syntax.tree.NonTerminalNode;
 import io.ballerinalang.compiler.syntax.tree.ParameterizedTypeDescriptorNode;
 import io.ballerinalang.compiler.syntax.tree.QualifiedNameReferenceNode;
-import io.ballerinalang.compiler.syntax.tree.SyntaxKind;
 import org.ballerinalang.annotation.JavaSPIService;
 import org.ballerinalang.langserver.common.utils.QNameReferenceUtil;
 import org.ballerinalang.langserver.commons.LSContext;
@@ -47,14 +46,14 @@ public class ParameterizedTypeDescriptorNodeContext
     @Override
     public List<LSCompletionItem> getCompletions(LSContext context, ParameterizedTypeDescriptorNode node) {
         NonTerminalNode nodeAtCursor = context.get(CompletionKeys.NODE_AT_CURSOR_KEY);
-        if (nodeAtCursor.kind() == SyntaxKind.QUALIFIED_NAME_REFERENCE) {
+        if (this.onQualifiedNameIdentifier(context, nodeAtCursor)) {
             List<Scope.ScopeEntry> typesInModule = QNameReferenceUtil.getTypesInModule(context,
                     (QualifiedNameReferenceNode) nodeAtCursor);
             return this.getCompletionItemList(typesInModule, context);
         }
 
         List<LSCompletionItem> completionItems = new ArrayList<>();
-        completionItems.addAll(this.getPackagesCompletionItems(context));
+        completionItems.addAll(this.getModuleCompletionItems(context));
         completionItems.addAll(this.getTypeItems(context));
 
         return completionItems;

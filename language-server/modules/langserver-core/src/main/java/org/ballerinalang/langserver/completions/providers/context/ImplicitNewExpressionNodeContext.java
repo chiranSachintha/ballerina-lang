@@ -55,19 +55,13 @@ public class ImplicitNewExpressionNodeContext extends AbstractCompletionProvider
     }
 
     @Override
-    public List<LSCompletionItem> getCompletions(LSContext ctx) {
-
-        return new ArrayList<>();
-    }
-
-    @Override
     public List<LSCompletionItem> getCompletions(LSContext context, ImplicitNewExpressionNode node) {
         /*
         Supports the following
         (1) lhs = new <cursor>
         */
         Optional<BObjectTypeSymbol> objectTypeSymbol = getObjectTypeSymbol(context, node);
-        List<LSCompletionItem> completionItems = new ArrayList<>(this.getPackagesCompletionItems(context));
+        List<LSCompletionItem> completionItems = new ArrayList<>(this.getModuleCompletionItems(context));
         objectTypeSymbol.ifPresent(bSymbol -> completionItems.add(this.getExplicitNewCompletionItem(bSymbol, context)));
 
         return completionItems;
@@ -92,7 +86,7 @@ public class ImplicitNewExpressionNodeContext extends AbstractCompletionProvider
 
         Scope.ScopeEntry scopeEntry = null;
         List<Scope.ScopeEntry> visibleSymbols = new ArrayList<>(context.get(CommonKeys.VISIBLE_SYMBOLS_KEY));
-        if (typeDescriptor.kind() == SyntaxKind.QUALIFIED_NAME_REFERENCE) {
+            if (this.onQualifiedNameIdentifier(context, typeDescriptor)) {
             QualifiedNameReferenceNode nameReferenceNode = (QualifiedNameReferenceNode) typeDescriptor;
 
             Optional<Scope.ScopeEntry> pkgSymbol = CommonUtil.packageSymbolFromAlias(context,

@@ -100,6 +100,8 @@ public enum Snippet {
 
     DEF_SERVICE_GRPC(SnippetGenerator.getGRPCServiceDefSnippet()),
 
+    DEF_CLASS(SnippetGenerator.getClassDefSnippet()),
+
     DEF_WORKER(SnippetGenerator.getWorkerDeclarationSnippet()),
 
     DEF_REMOTE_FUNCTION(SnippetGenerator.getRemoteFunctionSnippet()),
@@ -116,11 +118,13 @@ public enum Snippet {
 
     DEF_DETACH_FUNCTION(SnippetGenerator.getDetachFunctionSnippet()),
 
-    
+
     // Expressions Snippets
     EXPR_MATCH(SnippetGenerator.getMatchExpressionSnippet()),
 
     EXPR_ERROR_CONSTRUCTOR(SnippetGenerator.getErrorConstructorSnippet()),
+
+    EXPR_OBJECT_CONSTRUCTOR(SnippetGenerator.getObjectConstructorSnippet()),
 
 
     // Keyword Snippets
@@ -140,6 +144,8 @@ public enum Snippet {
 
     KW_LET(SnippetGenerator.getLetKeywordSnippet()),
 
+    KW_KEY(SnippetGenerator.getKeyKeywordSnippet()),
+
     KW_TRAP(SnippetGenerator.getTrapKeywordSnippet()),
 
     KW_ERROR(SnippetGenerator.getErrorKeywordSnippet()),
@@ -154,7 +160,21 @@ public enum Snippet {
 
     KW_AS(SnippetGenerator.getAsKeywordSnippet()),
 
+    KW_VERSION(SnippetGenerator.getVersionKeywordSnippet()),
+
     KW_FROM(SnippetGenerator.getFromKeywordSnippet()),
+
+    KW_WHERE(SnippetGenerator.getWhereKeywordSnippet()),
+
+    KW_JOIN(SnippetGenerator.getJoinKeywordSnippet()),
+
+    KW_ORDERBY(SnippetGenerator.getOrderByKeywordSnippet()),
+
+    KW_LIMIT(SnippetGenerator.getLimitKeywordSnippet()),
+
+    KW_SELECT(SnippetGenerator.getSelectKeywordSnippet()),
+
+    KW_EQUALS(SnippetGenerator.getEqualsKeywordSnippet()),
 
     KW_FLUSH(SnippetGenerator.getFlushKeywordSnippet()),
 
@@ -166,9 +186,15 @@ public enum Snippet {
 
     KW_PUBLIC(SnippetGenerator.getPublicKeywordSnippet()),
 
+    KW_ISOLATED(SnippetGenerator.getIsolatedKeywordSnippet()),
+
     KW_PRIVATE(SnippetGenerator.getPrivateKeywordSnippet()),
 
     KW_FINAL(SnippetGenerator.getFinalKeywordSnippet()),
+
+    KW_FAIL(SnippetGenerator.getFailKeywordSnippet()),
+
+    KW_REMOTE(SnippetGenerator.getRemoteKeywordSnippet()),
 
     KW_CONST(SnippetGenerator.getConstKeywordSnippet()),
 
@@ -187,6 +213,10 @@ public enum Snippet {
     KW_ENUM(SnippetGenerator.getEnumKeywordSnippet()),
 
     KW_XMLNS(SnippetGenerator.getXMLNSKeywordSnippet()),
+
+    KW_CLASS(SnippetGenerator.getClassKeywordSnippet()),
+
+    KW_DISTINCT(SnippetGenerator.getDistinctKeywordSnippet()),
 
     KW_LISTENER(SnippetGenerator.getListenerKeywordSnippet()),
 
@@ -207,6 +237,10 @@ public enum Snippet {
     KW_COMMIT(SnippetGenerator.getCommitKeywordSnippet()),
 
     KW_IS(SnippetGenerator.getIsKeywordSnippet()),
+
+    KW_ASCENDING(SnippetGenerator.getAscendingKeywordSnippet()),
+
+    KW_DESCENDING(SnippetGenerator.getDescendingKeywordSnippet()),
 
     // Statement Snippets
     STMT_BREAK(SnippetGenerator.getBreakSnippet()),
@@ -243,75 +277,22 @@ public enum Snippet {
 
     STMT_WHILE(SnippetGenerator.getWhileStatementSnippet()),
 
-    // Iterable Operation snippets
-    ITR_FOREACH(SnippetGenerator.getIterableForeachSnippet()),
+    STMT_DO(SnippetGenerator.getDoStatementSnippet()),
 
-    ITR_MAP(SnippetGenerator.getIterableMapSnippet()),
+    // Snippets related to various clauses such as from, where and etc
+    CLAUSE_FROM(SnippetGenerator.getFromClauseSnippet()),
+    
+    CLAUSE_LET(SnippetGenerator.getLetClauseSnippet()),
+    
+    CLAUSE_JOIN(SnippetGenerator.getJoinClauseSnippet()),
+    
+    CLAUSE_ON_FAIL(SnippetGenerator.getOnFailClauseSnippet());
 
-    ITR_FILTER(SnippetGenerator.getIterableFilterSnippet()),
-
-    ITR_COUNT(SnippetGenerator.getIterableCountSnippet()),
-
-    ITR_SELECT(SnippetGenerator.getIterableSelectSnippet()),
-
-    ITR_MIN(SnippetGenerator.getIterableMinSnippet()),
-
-    ITR_MAX(SnippetGenerator.getIterableMaxSnippet()),
-
-    ITR_AVERAGE(SnippetGenerator.getIterableAverageSnippet()),
-
-    ITR_SUM(SnippetGenerator.getIterableSumSnippet()),
-
-    // Builtin Functions' snippets
-    BUILTIN_LENGTH(SnippetGenerator.getBuiltinLengthSnippet()),
-
-    BUILTIN_CLONE(SnippetGenerator.getBuiltinIsCloneSnippet()),
-
-    BUILTIN_FREEZE(SnippetGenerator.getBuiltinFreezeSnippet()),
-
-    BUILTIN_IS_FROZEN(SnippetGenerator.getBuiltinIsFrozenSnippet()),
-
-    BUILTIN_STAMP(SnippetGenerator.getBuiltinStampSnippet()),
-
-    BUILTIN_HAS_KEY(SnippetGenerator.getBuiltinHasKeySnippet()),
-
-    BUILTIN_REMOVE(SnippetGenerator.getBuiltinRemoveSnippet()),
-
-    BUILTIN_VALUES(SnippetGenerator.getBuiltinValuesSnippet()),
-
-    BUILTIN_KEYS(SnippetGenerator.getBuiltinKeysSnippet()),
-
-    BUILTIN_CLEAR(SnippetGenerator.getBuiltinClearSnippet()),
-
-    BUILTIN_CONVERT(SnippetGenerator.getBuiltinConvertSnippet()),
-
-    BUILTIN_IS_NAN(SnippetGenerator.getBuiltinIsNaNSnippet()),
-
-    BUILTIN_IS_FINITE(SnippetGenerator.getBuiltinIsFiniteSnippet()),
-
-    BUILTIN_IS_INFINITE(SnippetGenerator.getBuiltinIsInFiniteSnippet()),
-
-    BUILTIN_DETAIL(SnippetGenerator.getBuiltinDetailSnippet()),
-
-    BUILTIN_REASON(SnippetGenerator.getBuiltinReasonSnippet()),
-
-    // Iterable operators' lambda function parameters
-    ITR_ON_MAP_PARAMS(SnippetGenerator.getIterableOnMapParamSnippet()),
-
-    ITR_ON_JSON_PARAMS(SnippetGenerator.getIterableOnJsonParamSnippet()),
-
-    ITR_ON_XML_PARAMS(SnippetGenerator.getIterableOnXmlParamSnippet());
-
-    private String snippetName;
-    private SnippetBlock snippetBlock;
+    private final String snippetName;
+    private final SnippetBlock snippetBlock;
 
     Snippet(SnippetBlock snippetBlock) {
         this.snippetName = null;
-        this.snippetBlock = snippetBlock;
-    }
-
-    Snippet(String snippetName, SnippetBlock snippetBlock) {
-        this.snippetName = snippetName;
         this.snippetBlock = snippetBlock;
     }
 

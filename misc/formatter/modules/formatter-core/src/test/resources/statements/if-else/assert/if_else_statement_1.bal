@@ -1,5 +1,5 @@
 public function foo() {
-   if (true) {
+    if (true) {
 
-   }
+    }
 }
