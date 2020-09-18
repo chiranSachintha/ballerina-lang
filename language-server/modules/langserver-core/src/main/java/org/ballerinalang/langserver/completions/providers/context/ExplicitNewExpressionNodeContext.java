@@ -49,11 +49,6 @@ public class ExplicitNewExpressionNodeContext extends AbstractCompletionProvider
     }
 
     @Override
-    public List<LSCompletionItem> getCompletions(LSContext ctx) {
-        return new ArrayList<>();
-    }
-
-    @Override
     public List<LSCompletionItem> getCompletions(LSContext context, ExplicitNewExpressionNode node) {
         List<LSCompletionItem> completionItems = new ArrayList<>();
         TypeDescriptorNode typeDescriptor = node.typeDescriptor();
@@ -72,8 +67,8 @@ public class ExplicitNewExpressionNodeContext extends AbstractCompletionProvider
             for (BObjectTypeSymbol objectTypeSymbol : filteredList) {
                 completionItems.add(this.getExplicitNewCompletionItem(objectTypeSymbol, context));
             }
-            completionItems.addAll(this.getPackagesCompletionItems(context));
-        } else if (typeDescriptor.kind() == SyntaxKind.QUALIFIED_NAME_REFERENCE) {
+            completionItems.addAll(this.getModuleCompletionItems(context));
+        } else if (this.onQualifiedNameIdentifier(context, typeDescriptor)) {
             QualifiedNameReferenceNode referenceNode = (QualifiedNameReferenceNode) typeDescriptor;
             String moduleName = QNameReferenceUtil.getAlias(referenceNode);
             Optional<Scope.ScopeEntry> module = CommonUtil.packageSymbolFromAlias(context, moduleName);

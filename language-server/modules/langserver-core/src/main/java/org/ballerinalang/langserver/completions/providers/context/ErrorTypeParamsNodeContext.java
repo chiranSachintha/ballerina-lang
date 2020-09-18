@@ -18,7 +18,6 @@ package org.ballerinalang.langserver.completions.providers.context;
 import io.ballerinalang.compiler.syntax.tree.ErrorTypeParamsNode;
 import io.ballerinalang.compiler.syntax.tree.NonTerminalNode;
 import io.ballerinalang.compiler.syntax.tree.QualifiedNameReferenceNode;
-import io.ballerinalang.compiler.syntax.tree.SyntaxKind;
 import org.ballerinalang.annotation.JavaSPIService;
 import org.ballerinalang.jvm.util.Flags;
 import org.ballerinalang.langserver.common.CommonKeys;
@@ -65,7 +64,7 @@ public class ErrorTypeParamsNodeContext extends AbstractCompletionProvider<Error
                     && (symbol.type.getKind() == TypeKind.MAP || symbol.type.getKind() == TypeKind.RECORD);
         };
         List<Scope.ScopeEntry> mappingTypes;
-        if (nodeAtCursor.kind() == SyntaxKind.QUALIFIED_NAME_REFERENCE) {
+        if (this.onQualifiedNameIdentifier(context, nodeAtCursor)) {
             mappingTypes = QNameReferenceUtil.getModuleContent(context, (QualifiedNameReferenceNode) nodeAtCursor,
                     predicate.and(scopeEntry -> (scopeEntry.symbol.flags & Flags.PUBLIC) == Flags.PUBLIC));
             return this.getCompletionItemList(mappingTypes, context);
@@ -74,7 +73,7 @@ public class ErrorTypeParamsNodeContext extends AbstractCompletionProvider<Error
         List<Scope.ScopeEntry> visibleSymbols = context.get(CommonKeys.VISIBLE_SYMBOLS_KEY);
         mappingTypes = visibleSymbols.stream().filter(predicate).collect(Collectors.toList());
         List<LSCompletionItem> completionItems = this.getCompletionItemList(mappingTypes, context);
-        completionItems.addAll(this.getPackagesCompletionItems(context));
+        completionItems.addAll(this.getModuleCompletionItems(context));
 
         return completionItems;
     }
