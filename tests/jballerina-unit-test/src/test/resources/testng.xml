@@ -229,6 +229,11 @@
             </class>
             <class name="org.ballerinalang.test.balo.record.OpenRecordTypeReferenceTest" />
             <class name="org.ballerinalang.test.balo.record.ClosedRecordTypeReferenceTest" />
+            <class name="org.ballerinalang.test.annotations.AnnotationAccessViaReflectTest">
+                <methods>
+                    <exclude name="testAnnotAccess"/>
+                </methods>
+            </class>
         </classes>
     </test>
 </suite>
