@@ -41,7 +41,7 @@ public isolated function clone(AnydataType v) returns AnydataType = @java:Method
 #
 # + v - source value
 # + return - immutable clone of `v`
-public isolated function cloneReadOnly(AnydataType v) returns AnydataType = @java:Method {
+public isolated function cloneReadOnly(AnydataType v) returns AnydataType|readonly = @java:Method {
     'class: "org.ballerinalang.langlib.value.CloneReadOnly",
     name: "cloneReadOnly"
 } external;
