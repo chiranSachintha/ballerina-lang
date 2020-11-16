@@ -1,7 +1,5 @@
 import testorg/foo;
-import ballerina/reflect;
-import ballerina/http;
-
+import ballerina/lang.test;
 
 @foo:ConfigAnnotation {
     numVal: 10,
@@ -18,24 +16,20 @@ function testNonBallerinaAnnotations() returns foo:SomeConfiguration? {
     return tDesc.@foo:ConfigAnnotation;
 }
 
-@http:ServiceConfig {
+@test:ServiceConfig {
     basePath: "/myService"
 }
-service MyService on new http:MockListener(9090) {
+service MyService on new test:MockListener(9090) {
 
-    @http:ResourceConfig {
+    @test:ResourceConfig {
         path: "/bar"
     }
-    resource function foo(http:Caller caller, http:Request req) {
+    resource function foo(string caller, string req) {
 
     }
 }
 
-function testBallerinaServiceAnnotations() returns http:HttpServiceConfig? {
+function testBallerinaServiceAnnotations() returns test:TestServiceConfig? {
     typedesc<service> t = typeof MyService;
-    return t.@http:ServiceConfig;
-}
-
-function testBallerinaResourceAnnotations() returns any {
-    return reflect:getResourceAnnotations(MyService, "foo", "ResourceConfig", "ballerina/http:1.0.0");
+    return t.@test:ServiceConfig;
 }

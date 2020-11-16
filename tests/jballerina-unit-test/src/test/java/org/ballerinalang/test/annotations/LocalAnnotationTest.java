@@ -40,13 +40,13 @@ public class LocalAnnotationTest {
         Assert.assertEquals(result.getErrorCount(), 0);
     }
 
-    @Test (enabled = false)
+    @Test
     public void testLocalServiceAnnotEvaluation() {
         BValue[] returns = BRunUtil.invoke(result, "testAnnotEvaluation");
         Assert.assertEquals(returns.length, 1);
         BValueArray array = ((BValueArray) returns[0]);
-        Assert.assertEquals(array.size(), 6);
-        for (int i = 0; i < 6; i++) {
+        Assert.assertEquals(array.size(), 3);
+        for (int i = 0; i < 3; i++) {
             Assert.assertEquals(array.getBoolean(i), 1);
         }
     }

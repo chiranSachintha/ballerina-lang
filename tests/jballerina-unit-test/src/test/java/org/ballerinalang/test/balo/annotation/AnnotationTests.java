@@ -55,7 +55,7 @@ public class AnnotationTests {
         BAssertUtil.validateWarning(result, i, "usage of construct 'foo:deprecated_func()' is deprecated", 9, 18);
     }
 
-    @Test (enabled = false)
+    @Test
     public void testNonBallerinaAnnotations() {
         BValue[] returns = BRunUtil.invoke(result, "testNonBallerinaAnnotations");
         Assert.assertNotNull(returns);
@@ -65,22 +65,13 @@ public class AnnotationTests {
                 "recordVal:{nestNumVal:20, nextTextVal:\"nestText\"}}");
     }
 
-    @Test (enabled = false)
+    @Test
     public void testBallerinaServiceAnnotations() {
         BValue[] returns = BRunUtil.invoke(result, "testBallerinaServiceAnnotations");
         Assert.assertNotNull(returns);
         Assert.assertEquals(returns.length, 1);
         Assert.assertNotNull(returns[0]);
         Assert.assertTrue(returns[0].stringValue().contains("/myService"));
-    }
-
-    @Test (enabled = false)
-    public void testBallerinaResourceAnnotations() {
-        BValue[] returns = BRunUtil.invoke(result, "testBallerinaResourceAnnotations");
-        Assert.assertNotNull(returns);
-        Assert.assertEquals(returns.length, 1);
-        Assert.assertNotNull(returns[0]);
-        Assert.assertTrue(returns[0].stringValue().contains("/bar"));
     }
 
     @AfterClass
