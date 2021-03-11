@@ -15,14 +15,17 @@
  */
 package org.ballerinalang.langserver.codeaction;
 
+import io.ballerina.compiler.api.ModuleID;
 import io.ballerina.compiler.api.SemanticModel;
 import io.ballerina.compiler.api.symbols.ArrayTypeSymbol;
 import io.ballerina.compiler.api.symbols.FunctionSymbol;
+import io.ballerina.compiler.api.symbols.ModuleSymbol;
 import io.ballerina.compiler.api.symbols.RecordFieldSymbol;
 import io.ballerina.compiler.api.symbols.RecordTypeSymbol;
 import io.ballerina.compiler.api.symbols.Symbol;
 import io.ballerina.compiler.api.symbols.SymbolKind;
 import io.ballerina.compiler.api.symbols.TupleTypeSymbol;
+import io.ballerina.compiler.api.symbols.TypeDefinitionSymbol;
 import io.ballerina.compiler.api.symbols.TypeDescKind;
 import io.ballerina.compiler.api.symbols.TypeSymbol;
 import io.ballerina.compiler.api.symbols.UnionTypeSymbol;
@@ -46,6 +49,7 @@ import io.ballerina.compiler.syntax.tree.SyntaxTree;
 import io.ballerina.compiler.syntax.tree.TypeDefinitionNode;
 import io.ballerina.compiler.syntax.tree.VariableDeclarationNode;
 import io.ballerina.projects.Document;
+import io.ballerina.projects.util.ProjectConstants;
 import io.ballerina.tools.diagnostics.Diagnostic;
 import io.ballerina.tools.diagnostics.Location;
 import io.ballerina.tools.text.LinePosition;
@@ -58,7 +62,6 @@ import org.ballerinalang.langserver.common.ImportsAcceptor;
 import org.ballerinalang.langserver.common.utils.CommonUtil;
 import org.ballerinalang.langserver.common.utils.FunctionGenerator;
 import org.ballerinalang.langserver.commons.CodeActionContext;
-import org.ballerinalang.langserver.commons.DocumentServiceContext;
 import org.ballerinalang.langserver.commons.codeaction.CodeActionNodeType;
 import org.ballerinalang.langserver.commons.codeaction.spi.DiagBasedPositionDetails;
 import org.eclipse.lsp4j.DiagnosticSeverity;
@@ -173,13 +176,13 @@ public class CodeActionUtil {
      * Returns first possible type for this type descriptor.
      *
      * @param typeDescriptor {@link TypeSymbol}
-     * @param edits          a list of {@link TextEdit}
+     * @param importEdits    a list of import {@link TextEdit}
      * @param context        {@link CodeActionContext}
      * @return a list of possible type list
      */
-    public static Optional<String> getPossibleType(TypeSymbol typeDescriptor, List<TextEdit> edits,
-                                                   DocumentServiceContext context) {
-        List<String> possibleTypes = getPossibleTypes(typeDescriptor, edits, context);
+    public static Optional<String> getPossibleType(TypeSymbol typeDescriptor, List<TextEdit> importEdits,
+                                                   CodeActionContext context) {
+        List<String> possibleTypes = getPossibleTypes(typeDescriptor, importEdits, context);
         return possibleTypes.isEmpty() ? Optional.empty() : Optional.of(possibleTypes.get(0));
     }
 
@@ -187,12 +190,12 @@ public class CodeActionUtil {
      * Returns a list of possible types for this type descriptor.
      *
      * @param typeDescriptor {@link TypeSymbol}
-     * @param edits          a list of {@link TextEdit}
+     * @param importEdits    a list of import {@link TextEdit}
      * @param context        {@link CodeActionContext}
      * @return a list of possible type list
      */
-    public static List<String> getPossibleTypes(TypeSymbol typeDescriptor, List<TextEdit> edits,
-                                                DocumentServiceContext context) {
+    public static List<String> getPossibleTypes(TypeSymbol typeDescriptor, List<TextEdit> importEdits,
+                                                CodeActionContext context) {
         if (typeDescriptor.getName().isPresent() && typeDescriptor.getName().get().startsWith("$")) {
             typeDescriptor = CommonUtil.getRawType(typeDescriptor);
         }
@@ -203,11 +206,20 @@ public class CodeActionUtil {
             // Handle ambiguous mapping construct types {}
 
             // Matching Record type
-            // TODO: Disabled due to #26789
-//            if (matchingRecordType != null) {
-//                String recType = FunctionGenerator.generateTypeDefinition(importsAcceptor, typeDescriptor, context);
-//                types.add(recType);
-//            }
+            for (Symbol symbol : context.visibleSymbols(context.cursorPosition())) {
+                if (symbol instanceof TypeDefinitionSymbol &&
+                        ((TypeDefinitionSymbol) symbol).typeDescriptor().typeKind() == TypeDescKind.RECORD &&
+                        typeDescriptor.assignableTo(((TypeDefinitionSymbol) symbol).typeDescriptor())) {
+                    Optional<ModuleSymbol> module = symbol.getModule();
+                    String fqPrefix = "";
+                    if (module.isPresent() && !(ProjectConstants.ANON_ORG.equals(module.get().id().orgName()))) {
+                        ModuleID id = module.get().id();
+                        fqPrefix = id.orgName() + "/" + id.moduleName() + ":" + id.version() + ":";
+                    }
+                    String moduleQualifiedName = fqPrefix + symbol.getName().get();
+                    types.add(FunctionGenerator.processModuleIDsInText(importsAcceptor, moduleQualifiedName, context));
+                }
+            }
 
             // Anon Record
             String rType = FunctionGenerator.generateTypeDefinition(importsAcceptor, typeDescriptor, context);
@@ -287,7 +299,7 @@ public class CodeActionUtil {
             // Handle ambiguous array element types eg. record[], json[], map[]
             ArrayTypeSymbol arrayTypeSymbol = (ArrayTypeSymbol) typeDescriptor;
             boolean isUnion = arrayTypeSymbol.memberTypeDescriptor().typeKind() == TypeDescKind.UNION;
-            return getPossibleTypes(arrayTypeSymbol.memberTypeDescriptor(), edits, context)
+            return getPossibleTypes(arrayTypeSymbol.memberTypeDescriptor(), importEdits, context)
                     .stream().map(m -> isUnion ? "(" + m + ")[]" : m + "[]")
                     .collect(Collectors.toList());
         } else {
@@ -296,7 +308,7 @@ public class CodeActionUtil {
 
         // Remove brackets of the unions
         types = types.stream().map(v -> v.replaceAll("^\\((.*)\\)$", "$1")).collect(Collectors.toList());
-        edits.addAll(importsAcceptor.getNewImportTextEdits());
+        importEdits.addAll(importsAcceptor.getNewImportTextEdits());
         return types;
     }
 
