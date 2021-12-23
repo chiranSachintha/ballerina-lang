@@ -1392,10 +1392,11 @@ public class Desugar extends BLangNodeVisitor {
             bLangExpression = varNode.expr;
         } else {
             bLangExpression = rewriteExpr(varNode.expr);
+            if (bLangExpression != null) {
+                bLangExpression = addConversionExprIfRequired(bLangExpression, varNode.getBType());
+            }
         }
-        if (bLangExpression != null) {
-            bLangExpression = addConversionExprIfRequired(bLangExpression, varNode.getBType());
-        }
+
         varNode.expr = bLangExpression;
 
         varNode.annAttachments.forEach(attachment -> rewrite(attachment, env));

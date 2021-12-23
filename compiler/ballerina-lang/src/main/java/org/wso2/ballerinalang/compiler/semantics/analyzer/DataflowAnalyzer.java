@@ -1155,7 +1155,6 @@ public class DataflowAnalyzer extends BLangNodeVisitor {
     @Override
     public void visit(BLangInvocation invocationExpr) {
         analyzeNode(invocationExpr.expr, env);
-        checkVarRef(invocationExpr.symbol, invocationExpr.pos);
 
         BSymbol symbol = invocationExpr.symbol;
         this.unusedLocalVariables.remove(symbol);
