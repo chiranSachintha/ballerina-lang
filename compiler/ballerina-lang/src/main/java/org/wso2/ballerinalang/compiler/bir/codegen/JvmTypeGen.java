@@ -987,7 +987,7 @@ public class JvmTypeGen {
             } else {
                 mv.visitLdcInsn(bInvokableSymbol.name.value);
             }
-            loadType(mv, paramSymbol.type);
+            loadLocalType(mv, paramSymbol.type);
             mv.visitMethodInsn(INVOKESPECIAL, FUNCTION_PARAMETER, JVM_INIT_METHOD, INIT_FUNCTION_PARAM, false);
             mv.visitInsn(AASTORE);
         }
@@ -1007,7 +1007,7 @@ public class JvmTypeGen {
             mv.visitLdcInsn("");
             mv.visitInsn(ICONST_0);
             mv.visitInsn(ACONST_NULL);
-            loadType(mv, paramTypes.get(i));
+            loadLocalType(mv, paramTypes.get(i));
             mv.visitMethodInsn(INVOKESPECIAL, FUNCTION_PARAMETER, JVM_INIT_METHOD, INIT_FUNCTION_PARAM, false);
             mv.visitInsn(AASTORE);
         }
