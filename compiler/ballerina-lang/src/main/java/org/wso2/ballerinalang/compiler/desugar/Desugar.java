@@ -6694,7 +6694,6 @@ public class Desugar extends BLangNodeVisitor {
         reorderArguments(invocation);
 
         rewriteExprs(invocation.requiredArgs);
-
         fixStreamTypeCastsInInvocationParams(invocation);
         fixNonRestArgTypeCastInTypeParamInvocation(invocation);
 
