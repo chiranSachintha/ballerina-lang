@@ -17,6 +17,7 @@
  */
 package org.ballerinalang.formatter.core;
 
+import io.ballerina.compiler.syntax.tree.AlternateReceiveNode;
 import io.ballerina.compiler.syntax.tree.AnnotAccessExpressionNode;
 import io.ballerina.compiler.syntax.tree.AnnotationAttachPointNode;
 import io.ballerina.compiler.syntax.tree.AnnotationDeclarationNode;
@@ -164,6 +165,7 @@ import io.ballerina.compiler.syntax.tree.QueryConstructTypeNode;
 import io.ballerina.compiler.syntax.tree.QueryExpressionNode;
 import io.ballerina.compiler.syntax.tree.QueryPipelineNode;
 import io.ballerina.compiler.syntax.tree.ReceiveActionNode;
+import io.ballerina.compiler.syntax.tree.ReceiveFieldNode;
 import io.ballerina.compiler.syntax.tree.ReceiveFieldsNode;
 import io.ballerina.compiler.syntax.tree.RecordFieldNode;
 import io.ballerina.compiler.syntax.tree.RecordFieldWithDefaultValueNode;
@@ -258,6 +260,7 @@ import java.util.stream.Collectors;
 
 import static org.ballerinalang.formatter.core.FormatterUtils.isInlineRange;
 import static org.ballerinalang.formatter.core.FormatterUtils.sortImportDeclarations;
+import static org.ballerinalang.formatter.core.FormatterUtils.swapLeadingMinutiae;
 
 /**
  * A formatter implementation that updates the minutiae of a given tree according to the ballerina formatting
@@ -288,7 +291,7 @@ public class FormattingTreeModifier extends TreeModifier {
 
     @Override
     public ModulePartNode transform(ModulePartNode modulePartNode) {
-        NodeList<ImportDeclarationNode> imports = sortAndGroupImportDeclarationNodes(modulePartNode.imports());
+        NodeList<ImportDeclarationNode> imports = arrangeAndFormatImportDeclarations(modulePartNode.imports());
         NodeList<ModuleMemberDeclarationNode> members =
                 formatMemberDeclarations(modulePartNode.members(), n -> isMultilineModuleMember(n));
         Token eofToken = formatToken(modulePartNode.eofToken(), 0, 0);
@@ -649,7 +652,7 @@ public class FormattingTreeModifier extends TreeModifier {
     @Override
     public ImportDeclarationNode transform(ImportDeclarationNode importDeclarationNode) {
         boolean prevPreservedNewLine = env.hasPreservedNewline;
-        setPreserveNewline(false);
+        setPreserveNewline(hasLeadingComments(importDeclarationNode));
         Token importKeyword = formatToken(importDeclarationNode.importKeyword(), 1, 0);
         setPreserveNewline(prevPreservedNewLine);
         boolean hasPrefix = importDeclarationNode.prefix().isPresent();
@@ -3010,16 +3013,45 @@ public class FormattingTreeModifier extends TreeModifier {
 
     @Override
     public ReceiveFieldsNode transform(ReceiveFieldsNode receiveFieldsNode) {
-        Token openBrace = formatToken(receiveFieldsNode.openBrace(), 0, 1);
+        boolean preserveIndent = env.preserveIndentation;
+        preserveIndentation(false);
+        boolean isMultiline = shouldExpand(receiveFieldsNode);
+        int trailingNL = isMultiline ? 1 : 0;
+        int trailingWS = isMultiline ? 0 : 1;
+        Token openBrace = formatToken(receiveFieldsNode.openBrace(), 0, trailingNL);
         indent();
-        SeparatedNodeList<NameReferenceNode> receiveFields = formatSeparatedNodeList(receiveFieldsNode.receiveFields(),
-                0, 1, 0, 1);
-        Token closeBrace = formatToken(receiveFieldsNode.closeBrace(), 0, 1);
+        SeparatedNodeList<Node> receiveFields =
+                formatSeparatedNodeList(receiveFieldsNode.receiveFields(), 0, 0, trailingWS, trailingNL, 0,
+                        trailingNL);
         unindent();
+        Token closeBrace = formatToken(receiveFieldsNode.closeBrace(), env.trailingWS, env.trailingNL);
+        preserveIndentation(preserveIndent);
         return receiveFieldsNode.modify()
                 .withOpenBrace(openBrace)
                 .withReceiveFields(receiveFields)
                 .withCloseBrace(closeBrace)
+                .apply();
+    }
+
+    @Override
+    public AlternateReceiveNode transform(AlternateReceiveNode alternateReceiveNode) {
+        SeparatedNodeList<SimpleNameReferenceNode> workers =
+                formatSeparatedNodeList(alternateReceiveNode.workers(), 1, 0, env.trailingWS, env.trailingNL);
+        return alternateReceiveNode.modify()
+                .withWorkers(workers)
+                .apply();
+    }
+
+    @Override
+    public ReceiveFieldNode transform(ReceiveFieldNode receiveFieldNode) {
+        SimpleNameReferenceNode fieldName = formatNode(receiveFieldNode.fieldName(), 0, 0);
+        Token colon = formatToken(receiveFieldNode.colon(), 1, 0);
+        SimpleNameReferenceNode peerWorker = formatNode(receiveFieldNode.peerWorker(), env.trailingWS, env.trailingNL);
+
+        return receiveFieldNode.modify()
+                .withFieldName(fieldName)
+                .withColon(colon)
+                .withPeerWorker(peerWorker)
                 .apply();
     }
 
@@ -3505,8 +3537,17 @@ public class FormattingTreeModifier extends TreeModifier {
         Token workerKeyword = formatToken(namedWorkerDeclarationNode.workerKeyword(), 1, 0);
         IdentifierToken workerName = formatToken(namedWorkerDeclarationNode.workerName(), 1, 0);
         Node returnTypeDesc = formatNode(namedWorkerDeclarationNode.returnTypeDesc().orElse(null), 1, 0);
-        BlockStatementNode workerBody = formatNode(namedWorkerDeclarationNode.workerBody(), env.trailingWS,
-                env.trailingNL);
+
+        BlockStatementNode workerBody;
+        OnFailClauseNode onFailClause;
+        Optional<OnFailClauseNode> onFailClauseNode = namedWorkerDeclarationNode.onFailClause();
+        if (onFailClauseNode.isPresent()) {
+            workerBody = formatNode(namedWorkerDeclarationNode.workerBody(), 1, 0);
+            onFailClause = formatNode(onFailClauseNode.get(), env.trailingWS, env.trailingNL);
+        } else {
+            workerBody = formatNode(namedWorkerDeclarationNode.workerBody(), env.trailingWS, env.trailingNL);
+            onFailClause = null;
+        }
 
         return namedWorkerDeclarationNode.modify()
                 .withAnnotations(annotations)
@@ -3515,6 +3556,7 @@ public class FormattingTreeModifier extends TreeModifier {
                 .withWorkerName(workerName)
                 .withReturnTypeDesc(returnTypeDesc)
                 .withWorkerBody(workerBody)
+                .withOnFailClause(onFailClause)
                 .apply();
     }
 
@@ -4656,6 +4698,9 @@ public class FormattingTreeModifier extends TreeModifier {
             case LIST_CONSTRUCTOR:
                 ListConstructorExpressionNode listConstructorExpressionNode = (ListConstructorExpressionNode) node;
                 return listConstructorExpressionNode.toSourceCode().trim().contains(System.lineSeparator());
+            case RECEIVE_FIELDS:
+                ReceiveFieldsNode receiveFieldsNode = (ReceiveFieldsNode) node;
+                return receiveFieldsNode.toSourceCode().trim().contains(System.lineSeparator());
             default:
                 return false;
         }
@@ -4737,8 +4782,13 @@ public class FormattingTreeModifier extends TreeModifier {
         return minutiae != null && minutiae.kind() == kind;
     }
 
-    private NodeList<ImportDeclarationNode> sortAndGroupImportDeclarationNodes(
+    private NodeList<ImportDeclarationNode> arrangeAndFormatImportDeclarations(
             NodeList<ImportDeclarationNode> importDeclarationNodes) {
+        if (importDeclarationNodes.isEmpty()) {
+            return importDeclarationNodes;
+        }
+
+        ImportDeclarationNode firstImport = importDeclarationNodes.get(0);
         // moduleImports would collect only module level imports if grouping is enabled,
         // and would collect all imports otherwise
         List<ImportDeclarationNode> moduleImports = new ArrayList<>();
@@ -4774,6 +4824,12 @@ public class FormattingTreeModifier extends TreeModifier {
         imports.addAll(moduleImportNodes.stream().collect(Collectors.toList()));
         imports.addAll(stdLibImportNodes.stream().collect(Collectors.toList()));
         imports.addAll(thirdPartyImportNodes.stream().collect(Collectors.toList()));
+
+        if (hasLeadingComments(firstImport)) {
+            // This is to ensure license header remains at top of the file
+            swapLeadingMinutiae(firstImport, imports);
+        }
+
         return NodeFactory.createNodeList(imports);
     }
 
@@ -4782,6 +4838,16 @@ public class FormattingTreeModifier extends TreeModifier {
                 functionArgumentNode.children().size() > 0) {
             SyntaxKind kind = functionArgumentNode.children().get(0).kind();
             if (kind == SyntaxKind.OBJECT_CONSTRUCTOR || kind == SyntaxKind.MAPPING_CONSTRUCTOR) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasLeadingComments(Node node) {
+        MinutiaeList minutiaeList = node.leadingMinutiae();
+        for (Minutiae minutiae: minutiaeList) {
+            if (minutiae.kind() == SyntaxKind.COMMENT_MINUTIAE) {
                 return true;
             }
         }
