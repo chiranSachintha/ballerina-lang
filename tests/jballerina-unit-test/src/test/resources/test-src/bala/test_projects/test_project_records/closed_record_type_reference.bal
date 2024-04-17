@@ -14,6 +14,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import testOrg/public_and_private_types;
+
 public type BClosedPerson record {|
     string name = "anonymous";
     int age = 0;
@@ -41,6 +43,21 @@ public type ClosedVehicleWithNever record {|
 |};
 
 public type BClosedStudent record {|
-    string name = "";
-    int age = 0;
+    string name = "anonymous";
+    int age = 20;
 |};
+
+public type Info record {|
+    *public_and_private_types:Person;
+|};
+
+public type Info1 record {|
+    string name = "James";
+    *public_and_private_types:Person;
+|};
+
+public type Location record {
+    *public_and_private_types:Address;
+    string street = "abc";
+    int zipCode = 123;
+};
