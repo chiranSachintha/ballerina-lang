@@ -52,7 +52,7 @@ public class PackageDependency {
         }
 
         PackageDependency that = (PackageDependency) o;
-        return packageId.equals(that.packageId) && scope == that.scope;
+        return packageId.equals(that.packageId);
     }
 
     @Override
