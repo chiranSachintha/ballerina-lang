@@ -23,6 +23,7 @@ import io.ballerina.cli.utils.TestUtils;
 import io.ballerina.projects.ProjectEnvironmentBuilder;
 import io.ballerina.projects.environment.Environment;
 import io.ballerina.projects.environment.EnvironmentBuilder;
+import io.ballerina.projects.internal.model.BuildJson;
 import io.ballerina.projects.util.ProjectConstants;
 import io.ballerina.projects.util.ProjectUtils;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -51,6 +52,9 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -60,6 +64,7 @@ import java.util.stream.Stream;
 import static io.ballerina.cli.cmd.CommandOutputUtils.getOutput;
 import static io.ballerina.cli.cmd.CommandOutputUtils.readFileAsString;
 import static io.ballerina.cli.cmd.CommandOutputUtils.replaceDependenciesTomlContent;
+import static io.ballerina.cli.cmd.CommandUtil.USER_HOME;
 import static io.ballerina.cli.utils.OsUtils.isWindows;
 import static io.ballerina.projects.util.ProjectConstants.BUILD_FILE;
 import static io.ballerina.projects.util.ProjectConstants.DEPENDENCIES_TOML;
@@ -68,6 +73,8 @@ import static io.ballerina.projects.util.ProjectConstants.RESOURCE_DIR_NAME;
 import static io.ballerina.projects.util.ProjectConstants.TARGET_DIR_NAME;
 import static io.ballerina.projects.util.ProjectConstants.TEST_RUNTIME_MAIN_ARGS_FILE;
 import static io.ballerina.projects.util.ProjectConstants.USER_DIR_PROPERTY;
+import static io.ballerina.projects.util.ProjectUtils.deleteDirectory;
+import static io.ballerina.projects.util.ProjectUtils.readBuildJson;
 
 /**
  * Test command tests.
@@ -78,6 +85,7 @@ public class TestCommandTest extends BaseCommandTest {
     private Path testResources;
     private Path testDistCacheDirectory;
     ProjectEnvironmentBuilder projectEnvironmentBuilder;
+    private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss-SSS");
 
     @Override
     @BeforeClass
@@ -120,7 +128,11 @@ public class TestCommandTest extends BaseCommandTest {
         TestCommand testCommand = new TestCommand(validBalFilePath, false);
         // name of the file as argument
         new CommandLine(testCommand).parseArgs(validBalFilePath.toString());
-        testCommand.execute();
+        try {
+            testCommand.execute();
+        } catch (BLauncherException e) {
+            Assert.fail(e.getMessage());
+        }
     }
 
     @Test(description = "Test non .bal file")
@@ -132,19 +144,21 @@ public class TestCommandTest extends BaseCommandTest {
 
         String buildLog = readOutput(true);
         Assert.assertTrue(buildLog.replace("\r", "")
-                .contains("Invalid Ballerina source file(.bal): " + nonBalFilePath));
+                .contains("invalid package path: " + nonBalFilePath +
+                        ". Please provide a valid Ballerina package, workspace or a standalone file."), buildLog);
     }
 
     @Test(description = "Test non existing bal file")
     public void testNonExistingBalFile() throws IOException {
         // valid source root path
-        Path validBalFilePath = this.testResources.resolve("valid-non-bal-file/xyz.bal");
-        TestCommand testCommand = new TestCommand(validBalFilePath, printStream, printStream, false);
-        new CommandLine(testCommand).parseArgs(validBalFilePath.toString());
+        Path balFilePath = this.testResources.resolve("valid-non-bal-file/xyz.bal");
+        TestCommand testCommand = new TestCommand(balFilePath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs(balFilePath.toString());
         testCommand.execute();
         String buildLog = readOutput(true);
         Assert.assertTrue(buildLog.replace("\r", "")
-                .contains("The file does not exist: " + validBalFilePath));
+                .contains("invalid package path: " + balFilePath +
+                        ". Please provide a valid Ballerina package, workspace or a standalone file."), buildLog);
 
     }
 
@@ -185,6 +199,7 @@ public class TestCommandTest extends BaseCommandTest {
     public void testTestBalProjectFromADifferentDirectory() throws IOException {
         Path projectPath = this.testResources.resolve("validProjectWithTests");
         TestCommand buildCommand = new TestCommand(projectPath, printStream, printStream, false);
+        cleanTarget(projectPath);
         new CommandLine(buildCommand).parseArgs(projectPath.toString());
         buildCommand.execute();
         String buildLog = readOutput(true);
@@ -225,6 +240,7 @@ public class TestCommandTest extends BaseCommandTest {
         System.setProperty(ProjectConstants.USER_DIR, projectPath.toString());
         // build the project
         BuildCommand buildCommand = new BuildCommand(projectPath, printStream, printStream, false , false);
+        cleanTarget(projectPath);
         new CommandLine(buildCommand).parseArgs();
         buildCommand.execute();
         Assert.assertTrue(projectPath.resolve("target/bin/winery.jar").toFile().exists());
@@ -283,6 +299,7 @@ public class TestCommandTest extends BaseCommandTest {
     @Test(description = "Test a ballerina project with --test-report", dataProvider = "optimizeDependencyCompilation")
     public void testTestWithReport(Boolean optimizeDependencyCompilation) {
         Path projectPath = this.testResources.resolve("validProjectWithTests");
+        deleteDirectory(projectPath.resolve("target"));
         TestCommand testCommand = new TestCommand(
                 projectPath, printStream, printStream, false, true, false, null, optimizeDependencyCompilation);
         new CommandLine(testCommand).parseArgs();
@@ -303,6 +320,58 @@ public class TestCommandTest extends BaseCommandTest {
         Assert.assertTrue(Files.exists(reportDir.resolve("static/css/main.15691da7.chunk.css")));
         Assert.assertTrue(Files.exists(reportDir.resolve("static/js/2.bc541f30.chunk.js")));
         Assert.assertTrue(Files.exists(reportDir.resolve("static/js/main.ea323a3b.chunk.js")));
+    }
+
+    @Test(description = "Test a ballerina project with --test-report --test-report-dir=<dir_path>",
+            dataProvider = "optimizeDependencyCompilation")
+    public void testTestWithReportDir(Boolean optimizeDependencyCompilation) throws IOException {
+        Path projectPath = this.testResources.resolve("validProjectWithTests");
+        deleteDirectory(projectPath.resolve("target"));
+        deleteDirectory(projectPath.resolve("report"));
+        TestCommand testCommand = new TestCommand(
+                projectPath, printStream, printStream, false, true,
+                projectPath.resolve("report"), false, null, optimizeDependencyCompilation);
+        new CommandLine(testCommand).parseArgs();
+        try (MockedStatic<TestUtils> testUtilsMockedStatic = Mockito.mockStatic(
+                TestUtils.class, Mockito.CALLS_REAL_METHODS)) {
+            testUtilsMockedStatic.when(TestUtils::getReportToolsPath)
+                    .thenReturn(projectPath.resolve("resources/coverage/report.zip"));
+            testCommand.execute();
+        }
+        Path reportDir = projectPath.resolve("report");
+
+        Assert.assertTrue(Files.exists(reportDir));
+        Assert.assertTrue(Files.exists(reportDir.resolve("favicon.ico")));
+
+        assertTimeStampedFileExists(reportDir, "_index.html");
+        assertTimeStampedFileExists(reportDir, "_test_results.json");
+        Assert.assertTrue(Files.exists(reportDir.resolve("manifest.json")));
+        Assert.assertTrue(Files.exists(reportDir.resolve("static/css/2.d5162072.chunk.css")));
+        Assert.assertTrue(Files.exists(reportDir.resolve("static/css/main.15691da7.chunk.css")));
+        Assert.assertTrue(Files.exists(reportDir.resolve("static/js/2.bc541f30.chunk.js")));
+        Assert.assertTrue(Files.exists(reportDir.resolve("static/js/main.ea323a3b.chunk.js")));
+    }
+
+    private static void assertTimeStampedFileExists(Path reportDir, String suffix) throws IOException {
+        try (Stream<Path> paths = Files.list(reportDir)) {
+            boolean exists = paths.anyMatch(path -> isValidTimestampedFile(path, suffix));
+            Assert.assertTrue(exists, "Expected timestamped file with suffix " + suffix + " was not found");
+        }
+    }
+
+    private static boolean isValidTimestampedFile(Path path, String suffix) {
+        String fileName = path.getFileName().toString();
+        if (!fileName.endsWith(suffix)) {
+            return false;
+        }
+
+        String timestamp = fileName.substring(0, fileName.length() - suffix.length());
+        try {
+            LocalDateTime.parse(timestamp, FMT);
+            return true;
+        } catch (DateTimeParseException e) {
+            return false;
+        }
     }
 
     @Test(description = "tests bal test command with sticky flag")
@@ -414,9 +483,6 @@ public class TestCommandTest extends BaseCommandTest {
 
     @Test(description = "Test an empty project with build tools")
     public void testTestEmptyProjectWithBuildTools() throws IOException {
-        BCompileUtil.compileAndCacheBala(
-                testResources.resolve("buildToolResources/tools/ballerina-generate-file").toString(),
-                testCentralRepoCache, projectEnvironmentBuilder);
         Path projectPath = this.testResources.resolve("emptyProjectWithBuildTool");
         replaceDependenciesTomlContent(projectPath, "**INSERT_DISTRIBUTION_VERSION_HERE**",
                 RepoUtils.getBallerinaShortVersion());
@@ -428,13 +494,35 @@ public class TestCommandTest extends BaseCommandTest {
         Assert.assertEquals(buildLog.replace("\r", ""), getOutput("test-empty-project-with-build-tools.txt"));
     }
 
-    @Test(description = "Test the emission of testable fat jar for a project with tests")
+    @Test(description = "Test --cloud=k8s flag with a project with tests")
+    public void testTestWithCloudK8s() throws IOException {
+        Path projectPath = this.testResources.resolve("validProjectWithTests");
+        ProjectUtils.deleteDirectory(projectPath.resolve("target"));
+        System.setProperty(ProjectConstants.USER_DIR, projectPath.toString());
+        Path mockedLocalRepo = this.testResources.resolve("mocked-local-repo");
+        System.setProperty(USER_HOME, mockedLocalRepo.toString());
+        TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs("--cloud=k8s");
+        testCommand.execute();
+
+        String buildLog = readOutput(true);
+        Assert.assertEquals(buildLog.replace("\r", ""), getOutput("test-project.txt"));
+
+        Path targetDir = projectPath.resolve("target");
+        Path testableJar = targetDir.resolve("bin/tests/winery-testable.jar");
+        Assert.assertFalse(Files.exists(testableJar));
+        Path mainArgsFile = testableJar.getParent().resolve(TEST_RUNTIME_MAIN_ARGS_FILE);
+        Assert.assertFalse(Files.exists(mainArgsFile));
+    }
+
+    @Test(description = "Test the emission of testable fat jar for a project with tests",
+            dependsOnMethods = "testTestWithCloudK8s")
     public void testTestableFatJarEmission() {
         Path projectPath = this.testResources.resolve("validProjectWithTests");
         System.setProperty(ProjectConstants.USER_DIR, projectPath.toString());
 
         Path mockedLocalRepo = this.testResources.resolve("mocked-local-repo");
-        System.setProperty("user.home", mockedLocalRepo.toString());
+        System.setProperty(USER_HOME, mockedLocalRepo.toString());
 
         TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
         new CommandLine(testCommand).parseArgs("--cloud=docker");
@@ -489,7 +577,7 @@ public class TestCommandTest extends BaseCommandTest {
         System.setProperty(ProjectConstants.USER_DIR, projectPath.toString());
 
         Path mockedLocalRepo = this.testResources.resolve("mocked-local-repo");
-        System.setProperty("user.home", mockedLocalRepo.toString());
+        System.setProperty(USER_HOME, mockedLocalRepo.toString());
 
         TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
         new CommandLine(testCommand).parseArgs("--cloud=docker");
@@ -502,7 +590,7 @@ public class TestCommandTest extends BaseCommandTest {
         //should exist only one testable jar
         try (Stream<Path> testableJars = Files.list(testableJar.getParent())) {
             Assert.assertEquals(testableJars.filter(path -> path.toString().endsWith(".jar"))
-                                    .map(Path::toFile).toList().size(), 1);
+                    .map(Path::toFile).toList().size(), 1);
         }
     }
 
@@ -551,7 +639,7 @@ public class TestCommandTest extends BaseCommandTest {
         System.setProperty(ProjectConstants.USER_DIR, projectPath.toString());
 
         Path mockedLocalRepo = this.testResources.resolve("mocked-local-repo");
-        System.setProperty("user.home", mockedLocalRepo.toString());
+        System.setProperty(USER_HOME, mockedLocalRepo.toString());
 
         TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
         new CommandLine(testCommand).parseArgs("--cloud=docker", "--graalvm");
@@ -564,7 +652,7 @@ public class TestCommandTest extends BaseCommandTest {
         //should exist only one testable jar
         try (Stream<Path> testableJars = Files.list(testableJar.getParent())) {
             Assert.assertEquals(testableJars.filter(path -> path.toString().endsWith(".jar"))
-                                    .map(Path::toFile).toList().size(), 1);
+                    .map(Path::toFile).toList().size(), 1);
         }
     }
 
@@ -575,7 +663,7 @@ public class TestCommandTest extends BaseCommandTest {
         System.setProperty(ProjectConstants.USER_DIR, projectPath.toString());
 
         Path mockedLocalRepo = this.testResources.resolve("mocked-local-repo");
-        System.setProperty("user.home", mockedLocalRepo.toString());
+        System.setProperty(USER_HOME, mockedLocalRepo.toString());
 
         TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
         new CommandLine(testCommand).parseArgs("--cloud=docker", "--graalvm");
@@ -649,7 +737,7 @@ public class TestCommandTest extends BaseCommandTest {
         System.setProperty(ProjectConstants.USER_DIR, projectPath.toString());
 
         Path mockedLocalRepo = this.testResources.resolve("mocked-local-repo");
-        System.setProperty("user.home", mockedLocalRepo.toString());
+        System.setProperty(USER_HOME, mockedLocalRepo.toString());
 
         TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
         new CommandLine(testCommand).parseArgs("--cloud=docker", "main_tests.bal");
@@ -709,5 +797,346 @@ public class TestCommandTest extends BaseCommandTest {
             String buildLog = readOutput(true);
             Assert.assertTrue(buildLog.contains("WARNING: Package is not compatible with GraalVM."));
         }
+    }
+
+    @Test(description = "Execute tests of a workspace")
+    public void testWorkspaceProject() throws IOException {
+        Path projectPath = this.testResources.resolve("workspaces/wp-with-tests");
+        System.setProperty(ProjectConstants.USER_DIR, projectPath.toString());
+        TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        cleanTarget(projectPath);
+        new CommandLine(testCommand);
+        testCommand.execute();
+        String output = readOutput().replace("\r", "");
+        Assert.assertTrue(output.contains(getOutput("wp-with-tests.txt")), output);
+    }
+
+    @Test(description = "Execute tests of a specific package in the workspace")
+    public void testSpecificPackageInTheWorkspace() throws IOException {
+        Path projectRoot = this.testResources.resolve("workspaces/wp-with-tests");
+        Path projectPath = projectRoot.resolve("hello-app");
+        System.setProperty(ProjectConstants.USER_DIR, projectPath.toString());
+        TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        cleanTarget(projectPath);
+        new CommandLine(testCommand);
+        testCommand.execute();
+        String output = readOutput().replace("\r", "");
+        Assert.assertTrue(output.contains(getOutput("wp-with-tests-hello-app.txt")), output);
+    }
+
+    @Test(description = "Execute tests of a specific package in the workspace that has no tests")
+    public void testSpecificPackageWithNoTestsInTheWorkspace() throws IOException {
+        Path projectRoot = this.testResources.resolve("workspaces/wp-with-tests");
+        Path projectPath = projectRoot.resolve("bye");
+        System.setProperty(ProjectConstants.USER_DIR, projectPath.toString());
+        TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        cleanTarget(projectPath);
+        new CommandLine(testCommand);
+        testCommand.execute();
+        String output = readOutput().replace("\r", "");
+        Assert.assertTrue(output.contains(getOutput("wp-with-tests-bye.txt")), output);
+    }
+
+
+    @Test(enabled = false, description = "Test a project twice with the same flags and different flags")
+    public void testBuildAProjectTwiceWithFlags() throws IOException {
+        String[] argsList1 = {
+                "--offline",
+                "--sticky",
+                 "--locking-mode=soft",
+                "--experimental",
+                "--optimize-dependency-compilation",
+                "--observability-included"
+        };
+
+        // Use the same flag that affects jar generation similarly in the consecutive builds
+        for (String arg : argsList1) {
+            Path projectPath = this.testResources.resolve("projects-for-caching-tests/buildAProjectTwice");
+            deleteDirectory(projectPath.resolve("target"));
+            System.setProperty(USER_DIR_PROPERTY, projectPath.toString());
+            TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
+            new CommandLine(testCommand).parseArgs(arg);
+
+            testCommand.execute();
+            String firstBuildLog = readOutput(true);
+            testCommand = new TestCommand(projectPath, printStream, printStream, false);
+            new CommandLine(testCommand).parseArgs(arg);
+            testCommand.execute();
+            String secondBuildLog = readOutput(true);
+            Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+            Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+            Assert.assertTrue(secondBuildLog.contains("Compiling source (UP-TO-DATE)"),
+                    "Second build is not up-to-date for " + arg);
+        }
+
+        // Use different flags that affect jar generation differently in the consecutive builds
+        for (String arg : argsList1) {
+            if (arg.equals("--sticky") || arg.equals("--offline")) {
+                // Skip --sticky since the second build will sticky anyway within 24 hours
+                // Skip --offline since tests are always run offline
+                continue;
+            }
+            Path projectPath = this.testResources.resolve("projects-for-caching-tests/buildAProjectTwice");
+            deleteDirectory(projectPath.resolve("target"));
+            System.setProperty(USER_DIR_PROPERTY, projectPath.toString());
+            TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
+            new CommandLine(testCommand).parseArgs(arg);
+            testCommand.execute();
+            String firstBuildLog = readOutput(true);
+            testCommand = new TestCommand(projectPath, printStream, printStream, false);
+            new CommandLine(testCommand).parseArgs();
+            testCommand.execute();
+            String secondBuildLog = readOutput(true);
+            Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+            Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+            Assert.assertTrue(secondBuildLog.contains("Compiling source"));
+            Assert.assertFalse(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        }
+
+        String[] argsList2 = {
+                "--dump-graph",
+                "--dump-raw-graphs",
+                "--show-dependency-diagnostics",
+                "--dump-build-time",
+                //"--disable-syntax-tree-caching" // Enable it after fixing
+                // https://github.com/wso2-enterprise/integration-product-management/issues/293
+        };
+
+        // Use different flags that doesn't affect jar generation in the consecutive builds
+        for (String arg : argsList2) {
+            Path projectPath = this.testResources.resolve("projects-for-caching-tests/buildAProjectTwice");
+            deleteDirectory(projectPath.resolve("target"));
+            System.setProperty(USER_DIR_PROPERTY, projectPath.toString());
+            TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
+            new CommandLine(testCommand).parseArgs(arg);
+            testCommand.execute();
+            String firstBuildLog = readOutput(true);
+            testCommand = new TestCommand(projectPath, printStream, printStream, false);
+            new CommandLine(testCommand).parseArgs();
+            testCommand.execute();
+            String secondBuildLog = readOutput(true);
+            Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+            Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+            Assert.assertTrue(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        }
+
+        // Use different flags that affect jar generation in the consecutive builds
+        for (String arg : argsList2) {
+            Path projectPath = this.testResources.resolve("projects-for-caching-tests/buildAProjectTwice");
+            deleteDirectory(projectPath.resolve("target"));
+            System.setProperty(USER_DIR_PROPERTY, projectPath.toString());
+            TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
+            new CommandLine(testCommand).parseArgs();
+            testCommand.execute();
+            String firstBuildLog = readOutput(true);
+            testCommand = new TestCommand(projectPath, printStream, printStream, false);
+            new CommandLine(testCommand).parseArgs(arg);
+            testCommand.execute();
+            String secondBuildLog = readOutput(true);
+            Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+            Assert.assertTrue(secondBuildLog.contains("Compiling source"));
+            Assert.assertFalse(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        }
+
+        Path projectPath = this.testResources.resolve("projects-for-caching-tests/buildAProjectTwice");
+        deleteDirectory(projectPath.resolve("target"));
+        System.setProperty(USER_DIR_PROPERTY, projectPath.toString());
+        TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs();
+        testCommand.execute();
+        String firstBuildLog = readOutput(true);
+        testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs("--parallel");
+        testCommand.execute();
+        String secondBuildLog = readOutput(true);
+        Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+        Assert.assertTrue(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs("--list-groups");
+        testCommand.execute();
+        secondBuildLog = readOutput(true);
+        Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+        Assert.assertTrue(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs("--groups=g1");
+        testCommand.execute();
+        secondBuildLog = readOutput(true);
+        Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+        Assert.assertTrue(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs("--disable-groups=mod");
+        testCommand.execute();
+        secondBuildLog = readOutput(true);
+        Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+        Assert.assertTrue(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs("--tests=testfun");
+        testCommand.execute();
+        secondBuildLog = readOutput(true);
+        Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+        Assert.assertTrue(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs("--rerun-failed");
+        testCommand.execute();
+        secondBuildLog = readOutput(true);
+        Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+        Assert.assertTrue(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs("--test-report");
+        testCommand.execute();
+        secondBuildLog = readOutput(true);
+        Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+        Assert.assertTrue(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+    }
+
+    @Test(enabled = false, description = "Test a project after 24 hours of the last build")
+    public void testBuildAProjectTwiceBeforeAfter24Hr() throws IOException {
+        Path projectPath = this.testResources.resolve("projects-for-caching-tests/buildAProjectTwice");
+        deleteDirectory(projectPath.resolve("target"));
+        System.setProperty(USER_DIR_PROPERTY, projectPath.toString());
+        TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs();
+        testCommand.execute();
+        String firstBuildLog = readOutput(true);
+
+        // Second build within 24 hours
+        testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs();
+        testCommand.execute();
+        String secondBuildLog = readOutput(true);
+        Path buildFilePath = projectPath.resolve("target").resolve("build");
+        BuildJson buildJson = readBuildJson(buildFilePath);
+        buildJson.setLastUpdateTime(buildJson.lastUpdateTime() - (24 * 60 * 60 * 1000 + 1));
+        ProjectUtils.writeBuildFile(buildFilePath, buildJson);
+        testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs();
+        testCommand.execute();
+        String thirdBuildLog = readOutput(true);
+        Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+        Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        Assert.assertTrue(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        Assert.assertTrue(thirdBuildLog.contains("Compiling source"));
+        Assert.assertFalse(thirdBuildLog.contains("Compiling source (UP-TO-DATE)"));
+    }
+
+    @Test(enabled = false, description = "Test a project twice with the build command in the middle")
+    public void testBuildAProjectTwiceWithBuildCommandMiddle() throws IOException {
+        Path projectPath = this.testResources.resolve("projects-for-caching-tests/buildAProjectTwice");
+        deleteDirectory(projectPath.resolve("target"));
+        System.setProperty(USER_DIR_PROPERTY, projectPath.toString());
+        TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs();
+        testCommand.execute();
+        String firstBuildLog = readOutput(true);
+        BuildCommand buildCommand = new BuildCommand(projectPath, printStream, printStream, false);
+        new CommandLine(buildCommand).parseArgs();
+        buildCommand.execute();
+        String middleBuildLog = readOutput(true);
+        testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs();
+        testCommand.execute();
+        String secondBuildLog = readOutput(true);
+        Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+        Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        Assert.assertTrue(middleBuildLog.contains("Compiling source"));
+        Assert.assertFalse(middleBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        Assert.assertTrue(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
+    }
+
+    @Test(enabled = false, description = "Test a project twice with the pack command in the middle")
+    public void testBuildAProjectTwiceWithPackCommandMiddle() throws IOException {
+        Path projectPath = this.testResources.resolve("projects-for-caching-tests/buildAProjectTwice");
+        deleteDirectory(projectPath.resolve("target"));
+        System.setProperty(USER_DIR_PROPERTY, projectPath.toString());
+        TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs();
+        testCommand.execute();
+        String firstBuildLog = readOutput(true);
+        PackCommand packCommand = new PackCommand(projectPath, printStream, printStream, false, true);
+        new CommandLine(packCommand).parseArgs();
+        packCommand.execute();
+        String middleBuildLog = readOutput(true);
+        testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs();
+        testCommand.execute();
+        String secondBuildLog = readOutput(true);
+        Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+        Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        Assert.assertTrue(middleBuildLog.contains("Compiling source"));
+        Assert.assertFalse(middleBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        Assert.assertTrue(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
+    }
+
+    @Test(description = "Test a project with a new file within 24 hours of the last build")
+    public void testBuildAProjectWithFileAddition() throws IOException {
+        Path projectPath = this.testResources.resolve("projects-for-caching-tests/buildAProjectTwice");
+        deleteDirectory(projectPath.resolve("target"));
+        System.setProperty(USER_DIR_PROPERTY, projectPath.toString());
+        TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs();
+        testCommand.execute();
+        String firstBuildLog = readOutput(true);
+        Path balFilePath = projectPath.resolve("main2.bal");
+        String balContent = "public function main2() {\n}\n";
+        Files.writeString(balFilePath, balContent);
+        testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs();
+        testCommand.execute();
+        String secondBuildLog = readOutput(true);
+        Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+        Assert.assertTrue(secondBuildLog.contains("Compiling source"));
+        Assert.assertFalse(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+    }
+
+    @Test(description = "Test a project with file modification within 24 hours of the last build")
+    public void testBuildAProjectWithFileModification() throws IOException {
+        Path projectPath = this.testResources.resolve("projects-for-caching-tests/buildAProjectTwice");
+        deleteDirectory(projectPath.resolve("target"));
+        System.setProperty(USER_DIR_PROPERTY, projectPath.toString());
+        TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs();
+        testCommand.execute();
+        String firstBuildLog = readOutput(true);
+        Path balFilePath = projectPath.resolve("main.bal");
+        String balContent = "public function math() {\n}\n";
+        Files.writeString(balFilePath, balContent);
+        testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs();
+        testCommand.execute();
+        String secondBuildLog = readOutput(true);
+        Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+        Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        Assert.assertFalse(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
+    }
+
+    @Test(enabled = false, description = "Test a project with no content change")
+    public void testBuildAProjectWithFileNoContentChange() throws IOException {
+        Path projectPath = this.testResources.resolve("projects-for-caching-tests/buildAProjectTwice");
+        deleteDirectory(projectPath.resolve("target"));
+        System.setProperty(USER_DIR_PROPERTY, projectPath.toString());
+        TestCommand testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs();
+        testCommand.execute();
+        String firstBuildLog = readOutput(true);
+        Path balFilePath = projectPath.resolve("main.bal");
+        String balContent = "public function main() {\n\n}\n";
+        Files.writeString(balFilePath, balContent);
+        testCommand = new TestCommand(projectPath, printStream, printStream, false);
+        new CommandLine(testCommand).parseArgs();
+        testCommand.execute();
+        String secondBuildLog = readOutput(true);
+        Assert.assertTrue(firstBuildLog.contains("Compiling source"));
+        Assert.assertFalse(firstBuildLog.contains("Compiling source (UP-TO-DATE)"));
+        // Though the content is the same, the file modification time is changed.
+        // Hence, the build should not be up-to-date
+        Assert.assertFalse(secondBuildLog.contains("Compiling source (UP-TO-DATE)"));
     }
 }

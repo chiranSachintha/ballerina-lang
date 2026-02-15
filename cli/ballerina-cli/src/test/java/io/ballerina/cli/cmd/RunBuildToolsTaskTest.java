@@ -36,6 +36,8 @@ import org.wso2.ballerinalang.util.RepoUtils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -70,6 +72,19 @@ public class RunBuildToolsTaskTest extends BaseCommandTest {
             Path testResourcesPath = Path.of(
                     Objects.requireNonNull(getClass().getClassLoader().getResource("test-resources")).toURI());
             Files.walkFileTree(testResourcesPath, new BuildCommandTest.Copy(testResourcesPath, testResources));
+
+            // copy the sample-build-tool jar to the test tool projects
+            String sampleBuildToolJar = "sample-build-tool-1.0.0.jar";
+            Path sampleBuildToolJarPath = Paths.get("build/tool-libs").resolve(sampleBuildToolJar);
+            Path destPath = testResources.resolve("buildToolResources/tools/sample-build-tool-pkg")
+                    .resolve("lib").resolve(sampleBuildToolJar);
+            Files.createDirectories(destPath.getParent());
+            Files.copy(sampleBuildToolJarPath, destPath);
+
+            destPath = testResources.resolve("buildToolResources/tools/dummy-tool-pkg-higher-dist")
+                    .resolve("lib").resolve(sampleBuildToolJar);
+            Files.createDirectories(destPath.getParent());
+            Files.copy(sampleBuildToolJarPath, destPath);
         } catch (Exception e) {
             Assert.fail("error loading resources");
         }
@@ -87,7 +102,6 @@ public class RunBuildToolsTaskTest extends BaseCommandTest {
                 .resolve("missing-interface-tool-pkg").toString(), testCentralRepoCache);
         BCompileUtil.compileAndCacheBala(buildToolResources.resolve("tools")
                 .resolve("no-options-tool-pkg").toString(), testCentralRepoCache);
-
         BCompileUtil.compileAndCacheBala(buildToolResources.resolve("tools")
                 .resolve("dummy-tool-pkg-higher-dist").toString(), testCentralRepoCache);
 
@@ -106,7 +120,7 @@ public class RunBuildToolsTaskTest extends BaseCommandTest {
         Path projectPath = buildToolResources.resolve(projectName);
         Project project = BuildProject.load(projectPath,
                 BuildOptions.builder().setOffline(true).setSticky(sticky).build());
-        RunBuildToolsTask runBuildToolsTask = new RunBuildToolsTask(printStream);
+        RunBuildToolsTask runBuildToolsTask = new RunBuildToolsTask(printStream, false, new ArrayList<>());
         try {
             runBuildToolsTask.execute(project);
         } catch (BLauncherException e) {
@@ -128,7 +142,7 @@ public class RunBuildToolsTaskTest extends BaseCommandTest {
     public void testProjectForAddedGeneratedCode() throws IOException {
         Path projectPath = buildToolResources.resolve("project-with-generate-file-tool");
         Project project = BuildProject.load(projectPath, BuildOptions.builder().setOffline(true).build());
-        RunBuildToolsTask runBuildToolsTask = new RunBuildToolsTask(printStream);
+        RunBuildToolsTask runBuildToolsTask = new RunBuildToolsTask(printStream, false, new ArrayList<>());
         runBuildToolsTask.execute(project);
         String buildLog = readOutput(true);
         Assert.assertEquals(buildLog.replace("\r", ""), getOutput("build-tool-generate-file.txt"));

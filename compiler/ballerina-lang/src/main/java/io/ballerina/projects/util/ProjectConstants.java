@@ -113,6 +113,7 @@ public final class ProjectConstants {
     public static final String REPO_BALA_DIR_NAME = TARGET_BALA_DIR_NAME;
     public static final String REPO_CACHE_DIR_NAME = "cache";
     public static final String REPO_BIR_CACHE_NAME = "bir";
+    public static final String EXEC_BACKUP_DIR_NAME = "backup";
 
     // Test framework related constants
     public static final String TEST_RUNTIME_JAR_PREFIX = "testerina-runtime-";
@@ -136,10 +137,12 @@ public final class ProjectConstants {
     public static final String BALA_DOCS_DIR = "docs";
     public static final String REPOSITORIES_DIR = "repositories";
     public static final String LOCAL_REPOSITORY_NAME = "local";
+    public static final String DISTRIBUTION_REPOSITORY_NAME = "distribution";
     public static final String CENTRAL_REPOSITORY_CACHE_NAME = "central.ballerina.io";
     public static final String MAVEN_REPOSITORY_CACHE_NAME = "maven";
     public static final String DEPENDENCIES_TOML_VERSION = "2";
     public static final String BALLERINA_ORG = "ballerina";
+    public static final String BALLERINAX_ORG = "ballerinax";
     public static final String EXISTING_PACKAGE_FILES_DIR = "directories-with-existing-package-files-for-bal-new";
     public static final String CONFIG_ARGS_PATTERN = "-C[\\w\\W]+=([\\w\\W]+)";
     public static final String CONFIG_DIR = ".config";
@@ -149,7 +152,7 @@ public final class ProjectConstants {
     public static final String ORG = "org";
     public static final String PACKAGE_NAME = "name";
     public static final String LOCAL_TOOLS_JSON = "local-tools.json";
-    public static final String STICKY_FLAG = "--sticky";
+    public static final String LOCKING_MODE_OPTION = "--locking-mode";
     public static final String OFFLINE_FLAG = "--offline";
     public static final String REPOSITORY_FLAG = "--repository";
     public static final String WILD_CARD = "*";

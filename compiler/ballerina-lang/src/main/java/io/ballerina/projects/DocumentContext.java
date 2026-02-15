@@ -23,6 +23,7 @@ import io.ballerina.compiler.syntax.tree.ModulePartNode;
 import io.ballerina.compiler.syntax.tree.SeparatedNodeList;
 import io.ballerina.compiler.syntax.tree.SyntaxTree;
 import io.ballerina.projects.environment.ModuleLoadRequest;
+import io.ballerina.projects.internal.NaturalProgrammingImportAnalyzer;
 import io.ballerina.projects.internal.TransactionImportValidator;
 import io.ballerina.tools.diagnostics.Diagnostic;
 import io.ballerina.tools.text.TextDocument;
@@ -56,25 +57,22 @@ class DocumentContext {
     private Set<ModuleLoadRequest> moduleLoadRequests;
     private BLangCompilationUnit compilationUnit;
     private NodeCloner nodeCloner;
-    private final DocumentId documentId;
     private final String name;
-    private String content;
+    private DocumentConfig documentConfig;
     private final boolean disableSyntaxTree;
 
-    private DocumentContext(DocumentId documentId, String name, String content, boolean disableSyntaxTree) {
-        this.documentId = documentId;
-        this.name = name;
-        this.content = content;
+    private DocumentContext(DocumentConfig documentConfig, boolean disableSyntaxTree) {
+        this.documentConfig = documentConfig;
+        this.name = documentConfig.name();
         this.disableSyntaxTree = disableSyntaxTree;
     }
 
     static DocumentContext from(DocumentConfig documentConfig, boolean disableSyntaxTree) {
-        return new DocumentContext(documentConfig.documentId(), documentConfig.name(), documentConfig.content(),
-                disableSyntaxTree);
+        return new DocumentContext(documentConfig, disableSyntaxTree);
     }
 
     DocumentId documentId() {
-        return this.documentId;
+        return this.documentConfig.documentId();
     }
 
     String name() {
@@ -86,10 +84,10 @@ class DocumentContext {
             return this.syntaxTree;
         }
         if (!this.disableSyntaxTree) {
-            this.syntaxTree = SyntaxTree.from(this.textDocument(), this.name);
+            this.syntaxTree = SyntaxTree.from(this.textDocument(), this.name());
             return this.syntaxTree;
         }
-        return SyntaxTree.from(this.textDocument(), this.name);
+        return SyntaxTree.from(this.textDocument(), this.name());
     }
 
     SyntaxTree syntaxTree() {
@@ -101,10 +99,14 @@ class DocumentContext {
             return this.textDocument;
         }
         if (!this.disableSyntaxTree) {
-            this.textDocument = TextDocuments.from(this.content);
+            this.textDocument = TextDocuments.from(this::content);
             return this.textDocument;
         }
-        return TextDocuments.from(this.content);
+        return TextDocuments.from(this::content);
+    }
+
+    private String content() {
+        return this.documentConfig.content();
     }
 
     BLangCompilationUnit compilationUnit(CompilerContext compilerContext, PackageID pkgID, SourceKind sourceKind) {
@@ -116,7 +118,7 @@ class DocumentContext {
         if (this.compilationUnit != null) {
             return this.nodeCloner.cloneCUnit(this.compilationUnit);
         }
-        BLangNodeBuilder bLangNodeBuilder = new BLangNodeBuilder(compilerContext, pkgID, this.name);
+        BLangNodeBuilder bLangNodeBuilder = new BLangNodeBuilder(compilerContext, pkgID, this.name());
         this.compilationUnit = (BLangCompilationUnit) bLangNodeBuilder.accept(synTree.rootNode()).get(0);
         this.compilationUnit.setSourceKind(sourceKind);
         return this.nodeCloner.cloneCUnit(this.compilationUnit);
@@ -139,19 +141,45 @@ class DocumentContext {
             moduleLoadRequestSet.add(getModuleLoadRequest(importDcl, scope));
         }
 
+        addTransactionModuleImportIfRequired(currentModuleDesc, scope, modulePartNode, moduleLoadRequestSet);
+        addNaturalProgrammingModuleImportIfRequired(currentModuleDesc, scope, modulePartNode, moduleLoadRequestSet);
+        return moduleLoadRequestSet;
+    }
+
+    private static void addTransactionModuleImportIfRequired(ModuleDescriptor currentModuleDesc,
+                                                             PackageDependencyScope scope,
+                                                             ModulePartNode modulePartNode,
+                                                             Set<ModuleLoadRequest> moduleLoadRequestSet) {
         // TODO This is a temporary solution for SLP6 release
         // TODO Traverse the syntax tree to see whether to import the ballerinai/transaction package or not
         TransactionImportValidator trxImportValidator = new TransactionImportValidator();
-
-        if (trxImportValidator.shouldImportTransactionPackage(modulePartNode) &&
-                !currentModuleDesc.name().toString().equals(Names.TRANSACTION.value)) {
-            String moduleName = Names.TRANSACTION.value;
-            ModuleLoadRequest ballerinaiLoadReq = new ModuleLoadRequest(
-                    PackageOrg.from(Names.BALLERINA_INTERNAL_ORG.value),
-                    moduleName, scope, DependencyResolutionType.PLATFORM_PROVIDED);
-            moduleLoadRequestSet.add(ballerinaiLoadReq);
+        if (!trxImportValidator.shouldImportTransactionPackage(modulePartNode)) {
+            return;
         }
-        return moduleLoadRequestSet;
+        addModuleLoadRequest(currentModuleDesc, scope, moduleLoadRequestSet, Names.BALLERINA_INTERNAL_ORG.value,
+                Names.TRANSACTION.value, DependencyResolutionType.PLATFORM_PROVIDED);
+    }
+
+    private static void addNaturalProgrammingModuleImportIfRequired(ModuleDescriptor currentModuleDesc,
+                                                                    PackageDependencyScope scope,
+                                                                    ModulePartNode modulePartNode,
+                                                                    Set<ModuleLoadRequest> moduleLoadRequestSet) {
+        NaturalProgrammingImportAnalyzer naturalProgrammingImportAnalyzer = new NaturalProgrammingImportAnalyzer();
+        if (!naturalProgrammingImportAnalyzer.shouldImportNaturalProgrammingModule(modulePartNode)) {
+            return;
+        }
+        addModuleLoadRequest(currentModuleDesc, scope, moduleLoadRequestSet, Names.BALLERINA_ORG.value,
+                Names.NATURAL_PROGRAMMING.value, DependencyResolutionType.PLATFORM_PROVIDED);
+    }
+
+    private static void addModuleLoadRequest(ModuleDescriptor currentModuleDesc, PackageDependencyScope scope,
+                                             Set<ModuleLoadRequest> moduleLoadRequestSet, String orgName,
+                                             String moduleName, DependencyResolutionType dependencyResolutionType) {
+        if (!currentModuleDesc.name().toString().equals(moduleName)) {
+            ModuleLoadRequest moduleLoadRequest = new ModuleLoadRequest(
+                    PackageOrg.from(orgName), moduleName, scope, dependencyResolutionType);
+            moduleLoadRequestSet.add(moduleLoadRequest);
+        }
     }
 
     private ModuleLoadRequest getModuleLoadRequest(ImportDeclarationNode importDcl, PackageDependencyScope scope) {
@@ -189,7 +217,7 @@ class DocumentContext {
     }
 
     DocumentContext duplicate() {
-        return new DocumentContext(this.documentId, this.name, syntaxTree().toSourceCode(), false);
+        return new DocumentContext(this.documentConfig, false);
     }
 
     void shrink() {
@@ -198,6 +226,5 @@ class DocumentContext {
         }
         this.syntaxTree = null;
         this.moduleLoadRequests = null;
-        this.content = null;
     }
 }

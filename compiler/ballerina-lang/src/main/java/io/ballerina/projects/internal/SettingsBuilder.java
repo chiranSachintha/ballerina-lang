@@ -26,6 +26,7 @@ import io.ballerina.projects.internal.model.Proxy;
 import io.ballerina.projects.internal.model.Repository;
 import io.ballerina.projects.util.FileUtils;
 import io.ballerina.toml.semantic.TomlType;
+import io.ballerina.toml.semantic.ast.TomlBooleanValueNode;
 import io.ballerina.toml.semantic.ast.TomlKeyValueNode;
 import io.ballerina.toml.semantic.ast.TomlLongValueNode;
 import io.ballerina.toml.semantic.ast.TomlStringValueNode;
@@ -38,6 +39,7 @@ import io.ballerina.toml.validator.schema.Schema;
 import io.ballerina.tools.diagnostics.Diagnostic;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +53,7 @@ public class SettingsBuilder {
 
     public static final String NAME = "name";
     public static final String MAVEN = "maven";
+    public static final String FILESYSTEM = "filesystem";
     private static final String CONNECT_TIMEOUT = "connectTimeout";
     private static final String READ_TIMEOUT = "readTimeout";
     private static final String WRITE_TIMEOUT = "writeTimeout";
@@ -71,6 +74,8 @@ public class SettingsBuilder {
     private static final String REPOSITORY = "repository";
     private static final String ID = "id";
     private static final String URL = "url";
+    public static final String PATH = "path";
+    public static final String PROXY_CENTRAL = "proxyCentral";
     private static final int DEFAULT_CONNECT_TIMEOUT = 60;
     private static final int DEFAULT_READ_TIMEOUT = 60;
     private static final int DEFAULT_WRITE_TIMEOUT = 60;
@@ -128,7 +133,7 @@ public class SettingsBuilder {
         int maxRetries = DEFAULT_MAX_RETRY;
         String url = "";
         String id = "";
-        String repoName = "";
+        Path path = null;
         String repositoryUsername = "";
         String repositoryPassword = "";
         ArrayList<Repository> repositories = new ArrayList<>();
@@ -161,16 +166,31 @@ public class SettingsBuilder {
                 for (Map.Entry<String, TopLevelNode> entry : repoEntries.entrySet()) {
                     String repoKey = entry.getKey();
                     TopLevelNode repoValue = entry.getValue();
-                    if (!MAVEN.equals(repoKey)) {
+                    if (!MAVEN.equals(repoKey) && !FILESYSTEM.equals(repoKey)) {
                         continue;
                     }
                     List<TomlTableNode> repositoryNodes = ((TomlTableArrayNode) (repoValue)).children();
+                    boolean proxyCentralFound = false;
                     for (TomlTableNode repositoryNode : repositoryNodes) {
                         url = getStringOrDefaultFromTomlTableNode(repositoryNode, URL, "");
                         id = getStringOrDefaultFromTomlTableNode(repositoryNode, ID, "");
                         repositoryUsername = getStringOrDefaultFromTomlTableNode(repositoryNode, USERNAME, "");
                         repositoryPassword = getStringOrDefaultFromTomlTableNode(repositoryNode, ACCESS_TOKEN, "");
-                        repositories.add(Repository.from(id, url, repositoryUsername, repositoryPassword));
+                        String pathStr = getStringOrDefaultFromTomlTableNode(repositoryNode, PATH, "");
+                        boolean proxyCentral = getBooleanOrDefaultFromTomlTableNode(repositoryNode,
+                                PROXY_CENTRAL, false);
+                        if (proxyCentral && proxyCentralFound) {
+                            throw new ProjectException("Multiple repositories cannot be configured to " +
+                                    "proxy Ballerina central.");
+                        }
+                        if (proxyCentral) {
+                            proxyCentralFound = true;
+                        }
+                        if (!pathStr.isEmpty()) {
+                            path = Path.of(pathStr);
+                        }
+                        repositories.add(Repository.from(
+                                id, url, repositoryUsername, repositoryPassword, repoKey, path, proxyCentral));
                     }
                 }
             }
@@ -229,5 +249,30 @@ public class SettingsBuilder {
             }
         }
         return 0;
+    }
+
+    private boolean getBooleanOrDefaultFromTomlTableNode(TomlTableNode pkgNode, String key, boolean defaultValue) {
+        TopLevelNode topLevelNode = pkgNode.entries().get(key);
+        if (topLevelNode == null || topLevelNode.kind() == TomlType.NONE) {
+            // return default value
+            return defaultValue;
+        }
+        Boolean value = getBooleanFromTomlTableNode(topLevelNode);
+        if (value == null) {
+            return defaultValue;
+        }
+        return value;
+    }
+
+    private Boolean getBooleanFromTomlTableNode(TopLevelNode topLevelNode) {
+        if (topLevelNode.kind() == TomlType.KEY_VALUE) {
+            TomlKeyValueNode keyValueNode = (TomlKeyValueNode) topLevelNode;
+            TomlValueNode value = keyValueNode.value();
+            if (value.kind() == TomlType.BOOLEAN) {
+                TomlBooleanValueNode booleanValueNode = (TomlBooleanValueNode) value;
+                return booleanValueNode.getValue();
+            }
+        }
+        return null;
     }
 }

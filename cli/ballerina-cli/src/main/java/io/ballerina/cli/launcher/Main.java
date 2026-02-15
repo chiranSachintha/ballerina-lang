@@ -20,7 +20,16 @@ package io.ballerina.cli.launcher;
 
 import io.ballerina.cli.BLauncherCmd;
 import io.ballerina.cli.launcher.util.BalToolsUtil;
+import io.ballerina.projects.BalToolsManifest;
+import io.ballerina.projects.BalToolsToml;
+import io.ballerina.projects.BlendedBalToolsManifest;
+import io.ballerina.projects.SemanticVersion;
+import io.ballerina.projects.internal.BalToolsManifestBuilder;
+import io.ballerina.projects.util.CustomURLClassLoader;
 import io.ballerina.runtime.internal.utils.RuntimeUtils;
+import org.ballerinalang.central.client.exceptions.CentralClientException;
+import org.ballerinalang.central.client.model.ToolResolutionCentralRequest;
+import org.ballerinalang.central.client.model.ToolResolutionCentralResponse;
 import org.ballerinalang.compiler.BLangCompilerException;
 import picocli.CommandLine;
 
@@ -39,6 +48,9 @@ import static io.ballerina.cli.cmd.Constants.HELP_OPTION;
 import static io.ballerina.cli.cmd.Constants.HELP_SHORT_OPTION;
 import static io.ballerina.cli.cmd.Constants.VERSION_COMMAND;
 import static io.ballerina.cli.launcher.LauncherUtils.prepareCompilerErrorMessage;
+import static io.ballerina.projects.util.BalToolsUtil.BAL_TOOLS_TOML_PATH;
+import static io.ballerina.projects.util.BalToolsUtil.DIST_BAL_TOOLS_TOML_PATH;
+import static io.ballerina.projects.util.BalToolsUtil.getLatestVersionsInCentral;
 
 /**
  * This class executes a Ballerina program.
@@ -67,7 +79,7 @@ public final class Main {
                 errStream.println(prepareCompilerErrorMessage(e.getMessage()));
             }
             // These are compiler errors, and are already logged. Hence simply exit.
-            Runtime.getRuntime().exit(1);
+            System.exit(1);
         } catch (BLauncherException e) {
             LauncherUtils.printLauncherException(e, errStream);
             Runtime.getRuntime().exit(1);
@@ -169,16 +181,44 @@ public final class Main {
         if (null != args && args.length > 0 && BalToolsUtil.isToolCommand(args[0])) {
             String commandName = args[0];
             BalToolsUtil.addToolIfCommandIsABuiltInTool(commandName);
-            CustomToolClassLoader customToolClassLoader = BalToolsUtil.getCustomToolClassLoader(commandName);
-            Thread.currentThread().setContextClassLoader(customToolClassLoader);
-            return ServiceLoader.load(BLauncherCmd.class, customToolClassLoader);
+            // TODO: enable this when the indexing is implemented. Disabled for now to avoid slowness in the command
+            // checkForNewerVersions(commandName);
+            CustomURLClassLoader customURLClassLoader = BalToolsUtil.getCustomToolClassLoader(commandName);
+            Thread.currentThread().setContextClassLoader(customURLClassLoader);
+            return ServiceLoader.load(BLauncherCmd.class, customURLClassLoader);
         } else if (null == args || args.length == 0
                 || Arrays.asList(HELP_COMMAND, HELP_OPTION, HELP_SHORT_OPTION).contains(args[0])) {
-            CustomToolClassLoader customToolClassLoader = BalToolsUtil.getCustomToolClassLoader(HELP_COMMAND);
-            Thread.currentThread().setContextClassLoader(customToolClassLoader);
-            return ServiceLoader.load(BLauncherCmd.class, customToolClassLoader);
+            CustomURLClassLoader customURLClassLoader = BalToolsUtil.getCustomToolClassLoader(HELP_COMMAND);
+            Thread.currentThread().setContextClassLoader(customURLClassLoader);
+            return ServiceLoader.load(BLauncherCmd.class, customURLClassLoader);
         }
         return ServiceLoader.load(BLauncherCmd.class);
+    }
+
+    private static void checkForNewerVersions(String commandName) {
+        BalToolsToml balToolsToml = BalToolsToml.from(BAL_TOOLS_TOML_PATH);
+        BalToolsManifest balToolsManifest = BalToolsManifestBuilder.from(balToolsToml).build();
+        BalToolsToml distBalToolsToml = BalToolsToml.from(DIST_BAL_TOOLS_TOML_PATH);
+        BalToolsManifest distBalToolsManifest = BalToolsManifestBuilder.from(distBalToolsToml).build();
+        BlendedBalToolsManifest blendedBalToolsManifest = BlendedBalToolsManifest.from(balToolsManifest,
+                distBalToolsManifest);
+        BalToolsManifest.Tool tool = blendedBalToolsManifest.getActiveTool(commandName)
+                .orElseThrow();
+        SemanticVersion activeVersion = SemanticVersion.from(tool.version());
+
+        ToolResolutionCentralRequest toolResolutionRequest = new ToolResolutionCentralRequest();
+        toolResolutionRequest.addTool(commandName, "", ToolResolutionCentralRequest.Mode.SOFT);
+        try {
+            ToolResolutionCentralResponse latestVersionInCentral = getLatestVersionsInCentral(toolResolutionRequest);
+            SemanticVersion centralVersion = SemanticVersion.from(
+                    latestVersionInCentral.resolved().stream().findFirst().orElseThrow().version());
+            if (SemanticVersion.VersionCompatibilityResult.GREATER_THAN.equals(
+                    centralVersion.compareTo(activeVersion))) {
+                outStream.println("A newer version of the tool '" + commandName + "' is available: "
+                        + centralVersion + ". Run 'bal tool update " + commandName + "' to update the tool");
+            }
+        } catch (CentralClientException ignore) {
+        }
     }
 
     private static void printUsageInfo(String commandName) {
@@ -191,7 +231,7 @@ public final class Main {
             Properties properties = new Properties();
             properties.load(inputStream);
 
-            String version = properties.getProperty("ballerina.packVersion").split("-")[0];
+            String version = properties.getProperty("ballerina.packVersion").replace("-SNAPSHOT", "");
             int minorVersion = Integer.parseInt(version.split("\\.")[1]);
             String updateVersionText = minorVersion > 0 ? " Update " + minorVersion : "";
             String output = "Ballerina " + version +

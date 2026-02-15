@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - master
+      - 2201.[0-9]+.0-stage
 
 jobs:
   build-lang:
@@ -94,24 +95,28 @@ jobs:
 
       - name: Download Module Data
         run: |
-          wget https://raw.githubusercontent.com/ballerina-platform/ballerina-release/2201.12.x/dependabot/resources/extensions.json
-          wget https://raw.githubusercontent.com/ballerina-platform/ballerina-distribution/2201.12.x/gradle.properties
+          wget https://raw.githubusercontent.com/ballerina-platform/ballerina-release/master/dependabot/resources/extensions.json
+          wget https://raw.githubusercontent.com/ballerina-platform/ballerina-distribution/master/gradle.properties
 
       - name: Clone Modules
         run: |
           for module_name in $(jq -r '.standard_library| .[] | select(.level==${{ matrix.level }}) | .name' extensions.json); do
             echo "Cloning module: ${module_name}"
-            repo_url=https://github.com/ballerina-platform/${module_name}.git
-            branch=metrics-logs
-            if git ls-remote --heads "$repo_url" "$branch" | grep -q "$branch"; then
-              echo "Branch '$branch' found."
-              git clone -b "$branch" --single-branch "$repo_url"
+            if [[ $module_name == *-tool ]]; then
+              repo_name="${module_name}s"
             else
-              echo "Branch '$branch' not found. Cloning default branch '$default_branch' instead."
-              git clone $repo_url
+              repo_name="${module_name}"
             fi
+            repo_url="https://github.com/ballerina-platform/${repo_name}.git"
+            git clone $repo_url
           done
         shell: bash
+
+#      - name: Checkout non-default branch
+#        run: |
+#          for module_name in $(jq -r '.standard_library| .[] | select(.level==${{ matrix.level }}) | .name' extensions.json); do \
+#          cd $module_name && git fetch origin && git checkout -t origin/typeDesc-stmt || : && cd ..; \
+#          done
 
       - name: Update Lang Version in Module
         run: |
@@ -121,10 +126,15 @@ jobs:
 
       - name: Build Module
         run: |
-          for module_name in $(jq -r '.standard_library| .[] | select(.level==${{ matrix.level }}) | .name' extensions.json); do \
-          echo "Building Standard Library: $module_name" && \
-          cd $module_name && ./gradlew clean build --stacktrace --scan && cd ..; \
+          for module_name in $(jq -r '.standard_library| .[] | select(.level==${{ matrix.level }}) | .name' extensions.json); do
+            if [[ $module_name == *-tool ]]; then
+              repo_name="${module_name}s"
+            else
+              repo_name="${module_name}"
+            fi
+            echo "Building Standard Library: $repo_name" && cd $repo_name && ./gradlew clean build --stacktrace --scan && cd ..
           done
+        shell: bash
         env:
           packageUser: ${{ secrets.BALLERINA_BOT_USERNAME }}
           packagePAT: ${{ secrets.GITHUB_TOKEN }}
@@ -157,7 +167,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'ballerina-platform/ballerina-distribution'
-          ref: '2201.12.x'
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4

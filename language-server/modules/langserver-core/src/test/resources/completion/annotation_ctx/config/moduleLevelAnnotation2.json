@@ -4,6 +4,7 @@
     "character": 1
   },
   "source": "annotation_ctx/source/moduleLevelAnnotation2.bal",
+  "description": "",
   "items": [
     {
       "label": "ballerina/jballerina.java",
@@ -495,6 +496,14 @@
       "detail": "Typedesc",
       "sortText": "P",
       "insertText": "typedesc",
+      "insertTextFormat": "Snippet"
+    },
+    {
+      "label": "natural",
+      "kind": "Unit",
+      "detail": "type",
+      "sortText": "R",
+      "insertText": "natural",
       "insertTextFormat": "Snippet"
     }
   ]

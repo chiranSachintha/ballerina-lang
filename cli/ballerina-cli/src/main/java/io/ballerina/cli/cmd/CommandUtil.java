@@ -22,6 +22,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import io.ballerina.projects.BuildOptions;
+import io.ballerina.projects.DependencyGraph;
 import io.ballerina.projects.JBallerinaBackend;
 import io.ballerina.projects.JvmTarget;
 import io.ballerina.projects.Package;
@@ -29,18 +30,25 @@ import io.ballerina.projects.PackageCompilation;
 import io.ballerina.projects.PackageManifest;
 import io.ballerina.projects.PackageVersion;
 import io.ballerina.projects.PlatformLibraryScope;
+import io.ballerina.projects.Project;
 import io.ballerina.projects.ProjectEnvironmentBuilder;
 import io.ballerina.projects.ProjectException;
 import io.ballerina.projects.ResolvedPackageDependency;
 import io.ballerina.projects.SemanticVersion;
 import io.ballerina.projects.Settings;
 import io.ballerina.projects.bala.BalaProject;
+import io.ballerina.projects.directory.BuildProject;
+import io.ballerina.projects.directory.WorkspaceProject;
+import io.ballerina.projects.environment.PackageLockingMode;
+import io.ballerina.projects.environment.ResolutionOptions;
 import io.ballerina.projects.internal.bala.BalToolJson;
 import io.ballerina.projects.internal.bala.BalaJson;
 import io.ballerina.projects.internal.bala.DependencyGraphJson;
 import io.ballerina.projects.internal.bala.ModuleDependency;
 import io.ballerina.projects.internal.bala.PackageJson;
+import io.ballerina.projects.internal.model.BuildJson;
 import io.ballerina.projects.internal.model.Dependency;
+import io.ballerina.projects.internal.model.Target;
 import io.ballerina.projects.repos.FileSystemCache;
 import io.ballerina.projects.util.FileUtils;
 import io.ballerina.projects.util.ProjectConstants;
@@ -52,6 +60,7 @@ import org.ballerinalang.central.client.exceptions.CentralClientException;
 import org.ballerinalang.central.client.exceptions.PackageAlreadyExistsException;
 import org.wso2.ballerinalang.util.RepoUtils;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -63,13 +72,19 @@ import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Formatter;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -83,19 +98,27 @@ import java.util.stream.Stream;
 
 import static io.ballerina.cli.launcher.LauncherUtils.createLauncherException;
 import static io.ballerina.projects.util.ProjectConstants.BALA_JSON;
+import static io.ballerina.projects.util.ProjectConstants.BALLERINA_TOML;
 import static io.ballerina.projects.util.ProjectConstants.BAL_TOOL_JSON;
 import static io.ballerina.projects.util.ProjectConstants.BAL_TOOL_TOML;
+import static io.ballerina.projects.util.ProjectConstants.BLANG_SOURCE_EXT;
+import static io.ballerina.projects.util.ProjectConstants.CLOUD_TOML;
 import static io.ballerina.projects.util.ProjectConstants.DEPENDENCIES_TOML;
 import static io.ballerina.projects.util.ProjectConstants.DEPENDENCY_GRAPH_JSON;
+import static io.ballerina.projects.util.ProjectConstants.EXEC_BACKUP_DIR_NAME;
+import static io.ballerina.projects.util.ProjectConstants.GENERATED_MODULES_ROOT;
 import static io.ballerina.projects.util.ProjectConstants.LIB_DIR;
+import static io.ballerina.projects.util.ProjectConstants.MODULES_ROOT;
 import static io.ballerina.projects.util.ProjectConstants.PACKAGE_JSON;
+import static io.ballerina.projects.util.ProjectConstants.RESOURCE_DIR_NAME;
+import static io.ballerina.projects.util.ProjectConstants.SETTINGS_FILE_NAME;
+import static io.ballerina.projects.util.ProjectConstants.TEST_DIR_NAME;
 import static io.ballerina.projects.util.ProjectConstants.TOOL_DIR;
 import static io.ballerina.projects.util.ProjectUtils.deleteDirectory;
 import static io.ballerina.projects.util.ProjectUtils.getAccessTokenOfCLI;
 import static io.ballerina.projects.util.ProjectUtils.guessPkgName;
 import static io.ballerina.projects.util.ProjectUtils.initializeProxy;
 import static java.lang.Runtime.getRuntime;
-import static java.nio.file.Files.write;
 import static org.wso2.ballerinalang.programfile.ProgramFileConstants.ANY_PLATFORM;
 import static org.wso2.ballerinalang.util.RepoUtils.readSettings;
 
@@ -119,6 +142,10 @@ public final class CommandUtil {
     public static final String DEFAULT_TEMPLATE = "default";
     public static final String MAIN_TEMPLATE = "main";
     public static final String FILE_STRING_SEPARATOR = ", ";
+    public static final String SHA_256 = "SHA-256";
+    public static final String BYTE_TO_HEX_FORMAT = "%02x";
+    public static final String JAR = ".jar";
+    public static final String TEST_FAILURES_ERROR = "error: there are test failures";
     private static FileSystem jarFs;
     private static Map<String, String> env;
     private static PrintStream errStream;
@@ -870,6 +897,18 @@ public final class CommandUtil {
         // - .gitignore       <- git ignore file
         // - .devcontainer.json
 
+        initPackageByTemplate(path, ProjectUtils.guessOrgName(), packageName, template, balFilesExist);
+    }
+
+    public static void initPackageByTemplate(Path path, String orgName, String packageName, String template,
+                                             boolean balFilesExist)
+            throws IOException, URISyntaxException {
+        // We will be creating following in the project directory
+        // - Ballerina.toml
+        // - main.bal
+        // - .gitignore       <- git ignore file
+        // - .devcontainer.json
+
         applyTemplate(path, template, balFilesExist);
         if (template.equalsIgnoreCase(LIB_DIR)) {
             initLibPackage(path, packageName);
@@ -879,7 +918,7 @@ public final class CommandUtil {
         } else if (template.equalsIgnoreCase(TOOL_DIR)) {
             initToolPackage(path, packageName);
         } else {
-            initPackage(path, packageName);
+            initPackage(path, packageName, orgName);
         }
         createDefaultGitignore(path);
         createDefaultDevContainer(path);
@@ -988,14 +1027,14 @@ public final class CommandUtil {
      * @param path Project path
      * @throws IOException If any IO exception occurred
      */
-    public static void initPackage(Path path, String packageName) throws IOException {
+    public static void initPackage(Path path, String packageName, String org) throws IOException {
         Path ballerinaToml = path.resolve(ProjectConstants.BALLERINA_TOML);
         Files.createFile(ballerinaToml);
 
         String defaultManifest = FileUtils.readFileAsString(NEW_CMD_DEFAULTS + "/" + "manifest-app.toml");
         // replace manifest distribution with a guessed value
         defaultManifest = defaultManifest
-                .replace(ORG_NAME, ProjectUtils.guessOrgName())
+                .replace(ORG_NAME, org)
                 .replace(PKG_NAME, guessPkgName(packageName, "app"))
                 .replace(DIST_VERSION, RepoUtils.getBallerinaShortVersion());
         Files.writeString(ballerinaToml, defaultManifest);
@@ -1014,9 +1053,12 @@ public final class CommandUtil {
         Files.writeString(ballerinaToml, defaultManifest);
 
         // Create README.md
-        String packageMd = FileUtils.readFileAsString(NEW_CMD_DEFAULTS + "/" +
-                ProjectConstants.README_MD_FILE_NAME);
-        write(path.resolve(ProjectConstants.README_MD_FILE_NAME), packageMd.getBytes(StandardCharsets.UTF_8));
+        String readmeMd = FileUtils.readFileAsString(NEW_CMD_DEFAULTS + "/" + "lib-readme.md");
+        // replace lib org and name with a guessed value.
+        readmeMd = readmeMd.replace(ORG_NAME, ProjectUtils.guessOrgName())
+                .replace(PKG_NAME, guessPkgName(packageName, "lib"));
+
+        Files.writeString(path.resolve(ProjectConstants.README_MD_FILE_NAME), readmeMd);
     }
 
     /**
@@ -1039,11 +1081,12 @@ public final class CommandUtil {
 
         Path balToolToml = path.resolve(BAL_TOOL_TOML);
         Files.createFile(balToolToml);
-
         String balToolManifest = FileUtils.readFileAsString(NEW_CMD_DEFAULTS + "/" + "manifest-tool.toml");
         balToolManifest = balToolManifest.replace(TOOL_ID, guessPkgName(packageName, TOOL_DIR));
-
         Files.writeString(balToolToml, balToolManifest);
+
+        String readmeMd = FileUtils.readFileAsString(NEW_CMD_DEFAULTS + "/" + "tool-readme.md");
+        Files.writeString(path.resolve(ProjectConstants.README_MD_FILE_NAME), readmeMd);
     }
 
     private static PackageVersion findLatest(List<PackageVersion> packageVersions) {
@@ -1155,7 +1198,7 @@ public final class CommandUtil {
      */
     public static String checkPackageFilesExists(Path packagePath) {
         String[] packageFiles = {DEPENDENCIES_TOML, BAL_TOOL_TOML, ProjectConstants.PACKAGE_MD_FILE_NAME,
-                ProjectConstants.MODULE_MD_FILE_NAME, ProjectConstants.MODULES_ROOT, ProjectConstants.TEST_DIR_NAME};
+                ProjectConstants.MODULE_MD_FILE_NAME, ProjectConstants.MODULES_ROOT, TEST_DIR_NAME};
         StringBuilder existingFiles = new StringBuilder();
         for (String file : packageFiles) {
             if (Files.exists(packagePath.resolve(file))) {
@@ -1275,5 +1318,353 @@ public final class CommandUtil {
         return !providedDeps.isEmpty();
     }
 
+    public static boolean isPrevCurrCmdCompatible(BuildOptions buildOptions, BuildOptions prevBuildOptions) {
+       // Didn't add the sticky check as sticky is the default behaviour within 24Hr(regardless of sticky is false/true)
+       return prevBuildOptions.offlineBuild() != buildOptions.offlineBuild() ||
+               prevBuildOptions.optimizeDependencyCompilation() != buildOptions.optimizeDependencyCompilation() ||
+               prevBuildOptions.experimental() != buildOptions.experimental() ||
+               prevBuildOptions.remoteManagement() != buildOptions.remoteManagement() ||
+               !buildOptions.lockingMode().equals(prevBuildOptions.lockingMode()) ||
+               buildOptions.observabilityIncluded() != prevBuildOptions.observabilityIncluded();
+    }
 
+
+    public static boolean isFilesModifiedSinceLastBuild(BuildJson buildJson, Project project, boolean isTestExecution,
+                                                        boolean skipExecutable) throws IOException {
+        List<File> srcFilesToEvaluate = getSrcFiles(project);
+        List<File> testSrcFilesToEvaluate = getTestSrcFiles(project);
+
+        if (isProjectFilesModified(buildJson.getSrcMetaInfo(), srcFilesToEvaluate)) {
+            return true;
+        }
+        if (isTestExecution && isProjectFilesModified(buildJson.getTestSrcMetaInfo(), testSrcFilesToEvaluate)) {
+            return true;
+        }
+        Path resourcesPath = project.sourceRoot().resolve(RESOURCE_DIR_NAME);
+        if (Files.exists(resourcesPath)) {
+            List<File> filesInResourcesDir = getFilesInDir(resourcesPath);
+            if (isProjectFilesModified(buildJson.getResourcesMetaInfo(), filesInResourcesDir)) {
+                return true;
+            }
+        } else if (buildJson.getResourcesMetaInfo() != null) {
+            // resources/ directory existed in the previous build but not in the current build.
+            return true;
+        }
+
+        Path generatedPath = project.sourceRoot().resolve(GENERATED_MODULES_ROOT);
+        if (Files.exists(generatedPath)) {
+            List<File> filesInGeneratedDir = getFilesInDir(generatedPath);
+            if (isProjectFilesModified(buildJson.getGeneratedMetaInfo(), filesInGeneratedDir)) {
+                return true;
+            }
+        } else if (buildJson.getGeneratedMetaInfo() != null) {
+            // generated/ directory existed in the previous build but not in the current build.
+            return true;
+        }
+
+        if (isSettingsFileModified(buildJson)) {
+            return true;
+        }
+        if (isTomlFileModified(buildJson.getBallerinaTomlMetaInfo(),
+                project.sourceRoot().resolve(BALLERINA_TOML).toFile())) {
+            return true;
+        }
+        if (isTomlFileModified(buildJson.getCloudTomlMetaInfo(), project.sourceRoot().resolve(CLOUD_TOML).toFile())) {
+            return true;
+        }
+        if (isTestExecution) {
+            return isTestArtifactsModified(buildJson, project);
+        }
+        if (skipExecutable) {
+            return false;
+        }
+        return isExecutableModified(buildJson, project);
+    }
+
+    public static List<File> getFilesInDir(Path dirPath) throws IOException {
+        try (var paths = Files.walk(dirPath)) {
+            return paths
+                    .filter(Files::isRegularFile)
+                    .map(Path::toFile)
+                    .toList();
+        }
+    }
+
+    public static DependencyGraph<BuildProject> resolveWorkspaceDependencies(
+            WorkspaceProject workspaceProject, PrintStream outStream) {
+        outStream.println("Resolving workspace dependencies");
+        ResolutionOptions resolutionOptions = ResolutionOptions.builder()
+                .setOffline(true)
+                .setPackageLockingMode(PackageLockingMode.HARD)
+                .build();
+        DependencyGraph<BuildProject> projectDependencyGraph = workspaceProject.getResolution(resolutionOptions)
+                .dependencyGraph();
+        projectDependencyGraph.toTopologicallySortedList();
+        workspaceProject.clearCaches();
+        return projectDependencyGraph;
+    }
+
+    private static boolean isTomlFileModified(BuildJson.FileMetaInfo tomlFileMetaInfo, File tomlFile)  {
+        if (tomlFileMetaInfo == null) {
+            // No metadata exists for this TOML file (file was not tracked in the previous build)
+            return tomlFile.exists();
+        }
+        try {
+            if (tomlFile.exists() && tomlFile.isFile()) {
+                long lastModified = tomlFile.lastModified();
+                long size = Files.size(tomlFile.toPath());
+                if (tomlFileMetaInfo.getSize() == size &&
+                        tomlFileMetaInfo.getLastModifiedTime() == lastModified) {
+                    return false;
+                }
+                return !getSHA256Digest(tomlFile).equals(tomlFileMetaInfo.getHash());
+            }
+            return true;
+        } catch (IOException | NoSuchAlgorithmException e) {
+            return true;
+        }
+    }
+
+    private static boolean isTestArtifactsModified(BuildJson buildJson, Project project) throws IOException {
+        Target target = new Target(project.targetDir().resolve(EXEC_BACKUP_DIR_NAME));
+        Path testSuitePath = target.getTestsCachePath().resolve(ProjectConstants.TEST_SUITE_JSON);
+        if (!Files.exists(testSuitePath)) {
+            return true;
+        }
+        String packageOrg = project.currentPackage().packageOrg().toString();
+        String packageName = project.currentPackage().packageName().toString();
+        String packageVersion = project.currentPackage().packageVersion().toString();
+        List<Path> testArtifactsPaths =
+                Files.walk(target.cachesPath().resolve(packageOrg).resolve(packageName).resolve(packageVersion))
+                        .filter(Files::isRegularFile)
+                        .filter(path -> path.toString().endsWith(JAR))
+                        .toList();
+        BuildJson.FileMetaInfo[] testArtifactMetaInfo = buildJson.getTestArtifactMetaInfo();
+        if (testArtifactMetaInfo == null || testArtifactMetaInfo.length != (testArtifactsPaths.size() + 1)) {
+            return true;
+        }
+        testArtifactsPaths = new ArrayList<>(testArtifactsPaths);
+        testArtifactsPaths.add(testSuitePath);
+        for (BuildJson.FileMetaInfo fileMetaInfo : testArtifactMetaInfo) {
+            boolean fileExist = false;
+            for (Path artifactPath : testArtifactsPaths) {
+                if (!artifactPath.toString().equals(fileMetaInfo.getFile())) {
+                    continue;
+                }
+                fileExist = true;
+                try {
+                    long lastModified = Files.getLastModifiedTime(artifactPath).toMillis();
+                    long size = Files.size(artifactPath);
+                    if (fileMetaInfo.getSize() == size && fileMetaInfo.getLastModifiedTime() == lastModified) {
+                        break;
+                    }
+                    if (getSHA256Digest(artifactPath.toFile()).equals(fileMetaInfo.getHash())) {
+                        break;
+                    }
+                    return true;
+                } catch (IOException | NoSuchAlgorithmException e) {
+                    return true;
+                }
+            }
+            if (!fileExist) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isProjectFilesModified(BuildJson.FileMetaInfo[] fileMetaInfos, List<File> filesToEvaluate) {
+        if (fileMetaInfos == null) {
+            return !filesToEvaluate.isEmpty();
+        } else if (filesToEvaluate.size() != fileMetaInfos.length) {
+            return true;
+        }
+        for (BuildJson.FileMetaInfo fileMetaInfo : fileMetaInfos) {
+            boolean fileExist = false;
+            for (File file : filesToEvaluate) {
+                if (!file.getAbsolutePath().equals(fileMetaInfo.getFile())) {
+                    continue;
+                }
+                fileExist = true;
+                try {
+                    long lastModified = file.lastModified();
+                    long size = Files.size(file.toPath());
+                    if (fileMetaInfo.getSize() == size && fileMetaInfo.getLastModifiedTime() == lastModified) {
+                        break;
+                    }
+                    if (getSHA256Digest(file).equals(fileMetaInfo.getHash())) {
+                        break;
+                    }
+                    return true;
+                } catch (IOException | NoSuchAlgorithmException e) {
+                    return true;
+                }
+            }
+            if (!fileExist) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static List<File> getSrcFiles(Project project) {
+        File[] filesInRoot = project.sourceRoot().toAbsolutePath().toFile().listFiles();
+        List<File> filesToEvaluate = new ArrayList<>();
+        for (File file : filesInRoot) {
+            if (file.getName().endsWith(BLANG_SOURCE_EXT) || file.getName().equals(BALLERINA_TOML)) {
+                filesToEvaluate.add(file);
+            }
+        }
+        List<String> moduleNames = new ArrayList<>();
+        project.currentPackage().modules().forEach(
+                module -> moduleNames.add(module.moduleName().moduleNamePart()));
+        for (String moduleName : moduleNames) {
+            if (moduleName == null) {
+                continue;
+            }
+            File[] moduleSrcs = project.sourceRoot().resolve(MODULES_ROOT).resolve(moduleName)
+                    .toFile().listFiles();
+            if (moduleSrcs == null) {
+                continue;
+            }
+            for (File moduleSrc : moduleSrcs) {
+                if (moduleSrc.getName().endsWith(BLANG_SOURCE_EXT)) {
+                    filesToEvaluate.add(moduleSrc);
+                }
+            }
+        }
+        return filesToEvaluate;
+    }
+
+    public static List<File> getTestSrcFiles(Project project) {
+        List<File> filesToEvaluate = new ArrayList<>();
+        File testDir = project.sourceRoot().resolve(TEST_DIR_NAME).toFile();
+        if (testDir.exists() && testDir.isDirectory()) {
+            File[] testFiles = testDir.listFiles();
+            if (testFiles != null) {
+                for (File testFile : testFiles) {
+                    if (testFile.getName().endsWith(BLANG_SOURCE_EXT)) {
+                        filesToEvaluate.add(testFile);
+                    }
+                }
+            }
+
+        }
+
+        List<String> moduleNames = new ArrayList<>();
+        project.currentPackage().modules().forEach(
+                module -> moduleNames.add(module.moduleName().moduleNamePart()));
+        for (String moduleName : moduleNames) {
+            if (moduleName == null) {
+                continue;
+            }
+            File[] moduleSrcs = project.sourceRoot().resolve(MODULES_ROOT).resolve(moduleName)
+                    .toFile().listFiles();
+            if (moduleSrcs == null) {
+                continue;
+            }
+            File moduleTestDir = project.sourceRoot().resolve(MODULES_ROOT).resolve(moduleName)
+                    .resolve(TEST_DIR_NAME).toFile();
+            if (!moduleTestDir.exists() || !moduleTestDir.isDirectory()) {
+                continue;
+            }
+            File[] testFiles = moduleTestDir.listFiles();
+            if (testFiles == null) {
+                continue;
+            }
+            for (File testFile : testFiles) {
+                if (testFile.getName().endsWith(BLANG_SOURCE_EXT)) {
+                    filesToEvaluate.add(testFile);
+                }
+            }
+        }
+        return filesToEvaluate;
+    }
+
+    private static boolean isExecutableModified(BuildJson buildJson, Project project) {
+        try {
+            Target target = new Target(project.targetDir().resolve(EXEC_BACKUP_DIR_NAME));
+            File execFile = target.getExecutablePath(project.currentPackage()).toAbsolutePath().toFile();
+            if (execFile.exists() && execFile.isFile()) {
+                long lastModified = execFile.lastModified();
+                long size = Files.size(execFile.toPath());
+                BuildJson.FileMetaInfo targetExecMetaInfo = buildJson.getTargetExecMetaInfo();
+                if (targetExecMetaInfo == null) {
+                    return true;
+                }
+                if (targetExecMetaInfo.getSize() == size && targetExecMetaInfo.getLastModifiedTime() == lastModified) {
+                    return false;
+                }
+                return !getSHA256Digest(execFile).equals(targetExecMetaInfo.getHash());
+            }
+        } catch (IOException | NoSuchAlgorithmException e) {
+           // ignore the error and rebuild again
+        }
+        return true;
+    }
+
+    private static boolean isSettingsFileModified(BuildJson buildJson) {
+        try {
+            File settingsFile = RepoUtils.createAndGetHomeReposPath().resolve(SETTINGS_FILE_NAME)
+                    .toFile();
+            if (settingsFile.exists() && settingsFile.isFile()) {
+                long lastModified = settingsFile.lastModified();
+                long size = Files.size(settingsFile.toPath());
+                BuildJson.FileMetaInfo settingsFileMetaInfo = buildJson.getSettingsMetaInfo();
+                if (settingsFileMetaInfo == null) {
+                    return true;
+                }
+                if (settingsFileMetaInfo.getSize() == size &&
+                        settingsFileMetaInfo.getLastModifiedTime() == lastModified) {
+                    return false;
+                }
+                return !getSHA256Digest(settingsFile).equals(settingsFileMetaInfo.getHash());
+            }
+            return buildJson.getSettingsMetaInfo() != null;
+        } catch (IOException | NoSuchAlgorithmException e) {
+            return true;
+        }
+    }
+
+    public static String getSHA256Digest(File fileToEvaluate) throws NoSuchAlgorithmException, IOException {
+        MessageDigest digest = MessageDigest.getInstance(SHA_256);
+        byte[] fileBytes = Files.readAllBytes(fileToEvaluate.toPath());
+        byte[] hashBytes = digest.digest(fileBytes);
+        return bytesToHex(hashBytes);
+    }
+
+    private static String bytesToHex(byte[] bytes) {
+        Formatter formatter = new Formatter();
+        for (byte b : bytes) {
+            formatter.format(BYTE_TO_HEX_FORMAT, b);
+        }
+        String result = formatter.toString();
+        formatter.close();
+        return result;
+    }
+
+    public static void copyOneDirectoryUp(Path sourcePath) throws IOException {
+        Path parentPath = sourcePath.getParent();
+        Files.walkFileTree(sourcePath, new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Path relativePath = sourcePath.relativize(file);
+                Path destFile = parentPath.resolve(relativePath);
+                Files.createDirectories(destFile.getParent());
+                Files.copy(file, destFile, StandardCopyOption.REPLACE_EXISTING);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                if (dir.equals(sourcePath)) {
+                    return FileVisitResult.CONTINUE;
+                }
+                Path relativePath = sourcePath.relativize(dir);
+                Path destDir = parentPath.resolve(relativePath);
+                Files.createDirectories(destDir);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
 }

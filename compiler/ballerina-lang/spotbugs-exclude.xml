@@ -30,6 +30,9 @@
         <Package name="org.wso2.ballerinalang.compiler.bir.codegen" />
     </Match>
     <Match>
+        <Package name="org.wso2.ballerinalang.compiler.bir.codegen.desugar" />
+    </Match>
+    <Match>
         <Package name="org.wso2.ballerinalang.compiler.bir.codegen.interop" />
     </Match>
     <Match>
@@ -52,6 +55,9 @@
     </Match>
     <Match>
         <Package name="org.wso2.ballerinalang.compiler.bir.codegen.split.values" />
+    </Match>
+    <Match>
+        <Package name="org.wso2.ballerinalang.compiler.bir.codegen.utils" />
     </Match>
     <Match>
         <Package name="org.wso2.ballerinalang.compiler.bir.emit" />
@@ -468,6 +474,11 @@
         <Bug pattern="BC_UNCONFIRMED_CAST" />
     </Match>
     <Match>
+        <Class name="io.ballerina.projects.internal.SettingsBuilder" />
+        <Method name="getBooleanFromTomlTableNode"/>
+        <Bug pattern="NP_BOOLEAN_RETURN_NULL" />
+    </Match>
+    <Match>
         <Class name="io.ballerina.projects.util.ProjectUtils" />
         <Method name="addMatchingIncludePaths" />
         <Bug pattern="RCN_REDUNDANT_NULLCHECK_WOULD_HAVE_BEEN_A_NPE" />
@@ -506,5 +517,10 @@
             <Class name="org.wso2.ballerinalang.compiler.semantics.model.types.BObjectType"/>
             <Class name="org.wso2.ballerinalang.compiler.semantics.model.types.BFiniteType"/>
         </Bug>
+    </Match>
+    <Match>
+        <Class name="org.wso2.ballerinalang.compiler.bir.codegen.optimizer.LargeMethodOptimizer" />
+        <Method name="restoreOriginalArgsFromTuple" />
+        <Bug pattern="BC_UNCONFIRMED_CAST" />
     </Match>
 </FindBugsFilter>

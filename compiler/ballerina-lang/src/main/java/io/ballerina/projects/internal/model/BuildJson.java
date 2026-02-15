@@ -19,7 +19,9 @@
 package io.ballerina.projects.internal.model;
 
 import com.google.gson.annotations.SerializedName;
+import io.ballerina.projects.BuildOptions;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -37,6 +39,10 @@ public class BuildJson {
     @SerializedName(SERIALIZED_NAME_LAST_UPDATE_TIME)
     private long lastUpdateTime;
 
+    public static final String SERIALIZED_NAME_LAST_BAL_TOML_UPDATE_TIME = "last_bal_toml_update_time";
+    @SerializedName(SERIALIZED_NAME_LAST_BAL_TOML_UPDATE_TIME)
+    private long lastBalTomlUpdateTime;
+
     public static final String SERIALIZED_NAME_DISTRIBUTION_VERSION = "distribution_version";
     @SerializedName(SERIALIZED_NAME_DISTRIBUTION_VERSION)
     private String distributionVersion;
@@ -45,16 +51,76 @@ public class BuildJson {
     @SerializedName(SERIALIZED_NAME_LAST_MODIFIED_TIME)
     private Map<String, Long> lastModifiedTime;
 
+    public static final String LAST_BUILD_OPTIONS = "last_build_options";
+    @SerializedName(LAST_BUILD_OPTIONS)
+    private BuildOptions buildOptions;
+
+    public static final String SRC_META_INFO = "src_meta_info";
+    @SerializedName(SRC_META_INFO)
+    private FileMetaInfo[] srcMetaInfo;
+
+    public static final String TEST_SRC_META_INFO = "test_src_meta_info";
+    @SerializedName(TEST_SRC_META_INFO)
+    private FileMetaInfo[] testSrcMetaInfo;
+
+    public static final String TARGET_EXEC_META_INFO = "target_exec_meta_info";
+    @SerializedName(TARGET_EXEC_META_INFO)
+    private FileMetaInfo targetExecMetaInfo;
+
+    public static final String SETTINGS_META_INFO = "settings_meta_info";
+    @SerializedName(SETTINGS_META_INFO)
+    private FileMetaInfo settingsMetaInfo;
+
+    public static final String BALLERINA_TOML_META_INFO = "ballerina_toml_meta_info";
+    @SerializedName(BALLERINA_TOML_META_INFO)
+    private FileMetaInfo ballerinaTomlMetaInfo;
+
+    public static final String CLOUD_TOML_META_INFO = "cloud_toml_meta_info";
+    @SerializedName(CLOUD_TOML_META_INFO)
+    private FileMetaInfo cloudTomlMetaInfo;
+
+    public static final String RESOURCES_DIR_META_INFO = "resources_dir_meta_info";
+    @SerializedName(RESOURCES_DIR_META_INFO)
+    private FileMetaInfo[] resourcesDirMetaInfo;
+
+    public static final String GENERATED_DIR_META_INFO = "generated_dir_meta_info";
+    @SerializedName(GENERATED_DIR_META_INFO)
+    private FileMetaInfo[] generatedDirMetaInfo;
+
+    public static final String TEST_ARTIFACT_META_INFO = "test_artifact_meta_info";
+    @SerializedName(TEST_ARTIFACT_META_INFO)
+    private FileMetaInfo[] testArtifactMetaInfo;
+
+    public static final String TEST_CLASS_PATH = "test_class_path";
+    @SerializedName(TEST_CLASS_PATH)
+    private String testClassPath;
+
+    public static final String SERIALIZED_NAME_IMPORTS = "imports";
+    @SerializedName(SERIALIZED_NAME_IMPORTS)
+    private List<String> imports;
+
     private static final long ONE_DAY = 24 * 60 * 60 * 1000;
 
     public BuildJson(long lastBuildTime,
                      long lastUpdateTime,
                      String distributionVersion,
-                     Map<String, Long> lastModifiedTime) {
+                     Map<String, Long> lastModifiedTime,
+                     List<String> imports,
+                     long lastBalTomlUpdateTime) {
         this.lastBuildTime = lastBuildTime;
         this.lastUpdateTime = lastUpdateTime;
         this.distributionVersion = distributionVersion;
         this.lastModifiedTime = lastModifiedTime;
+        this.imports = imports;
+        this.lastBalTomlUpdateTime = lastBalTomlUpdateTime;
+    }
+
+    public BuildOptions getBuildOptions() {
+        return buildOptions;
+    }
+
+    public void setBuildOptions(BuildOptions buildOptions) {
+        this.buildOptions = buildOptions;
     }
 
     public long lastBuildTime() {
@@ -67,6 +133,21 @@ public class BuildJson {
 
     public long lastUpdateTime() {
         return lastUpdateTime;
+    }
+
+    public void setLastBalTomlUpdateTime(long lastBalTomlUpdateTime) {
+        this.lastBalTomlUpdateTime = lastBalTomlUpdateTime;
+    }
+
+    public long lastBalTomlUpdateTime() {
+        return lastBalTomlUpdateTime;
+    }
+
+    public void setImports(List<String> imports) {
+        this.imports = imports;
+    }
+    public List<String> imports() {
+        return imports;
     }
 
     public void setLastUpdateTime(long lastUpdateTime) {
@@ -92,5 +173,124 @@ public class BuildJson {
     public boolean isExpiredLastUpdateTime() {
         long oneDayAgo = System.currentTimeMillis() - ONE_DAY;
         return lastUpdateTime() < oneDayAgo;
+    }
+
+    public FileMetaInfo[] getSrcMetaInfo() {
+        return srcMetaInfo;
+    }
+
+    public void setSrcMetaInfo(FileMetaInfo[] srcMetaInfo) {
+        this.srcMetaInfo = srcMetaInfo;
+    }
+
+    public FileMetaInfo getTargetExecMetaInfo() {
+        return targetExecMetaInfo;
+    }
+
+    public void setTargetExecMetaInfo(FileMetaInfo targetExecMetaInfo) {
+        this.targetExecMetaInfo = targetExecMetaInfo;
+    }
+
+    public FileMetaInfo getSettingsMetaInfo() {
+        return settingsMetaInfo;
+    }
+
+    public void setSettingsMetaInfo(FileMetaInfo settingsMetaInfo) {
+        this.settingsMetaInfo = settingsMetaInfo;
+    }
+
+    public FileMetaInfo[] getTestArtifactMetaInfo() {
+        return testArtifactMetaInfo;
+    }
+
+    public void setTestArtifactMetaInfo(FileMetaInfo[] testArtifactMetaInfo) {
+        this.testArtifactMetaInfo = testArtifactMetaInfo;
+    }
+
+    public FileMetaInfo[] getTestSrcMetaInfo() {
+        return testSrcMetaInfo;
+    }
+
+    public void setTestSrcMetaInfo(FileMetaInfo[] testSrcMetaInfo) {
+        this.testSrcMetaInfo = testSrcMetaInfo;
+    }
+
+    public FileMetaInfo getBallerinaTomlMetaInfo() {
+        return ballerinaTomlMetaInfo;
+    }
+
+    public void setBallerinaTomlMetaInfo(FileMetaInfo ballerinaTomlMetaInfo) {
+        this.ballerinaTomlMetaInfo = ballerinaTomlMetaInfo;
+    }
+
+    public String getTestClassPath() {
+        return testClassPath;
+    }
+
+    public void setTestClassPath(String testClassPath) {
+        this.testClassPath = testClassPath;
+    }
+
+    public FileMetaInfo getCloudTomlMetaInfo() {
+        return cloudTomlMetaInfo;
+    }
+
+    public void setCloudTomlMetaInfo(FileMetaInfo cloudTomlMetaInfo) {
+        this.cloudTomlMetaInfo = cloudTomlMetaInfo;
+    }
+
+    public FileMetaInfo[] getResourcesMetaInfo() {
+        return resourcesDirMetaInfo;
+    }
+
+    public void setResourcesMetaInfo(FileMetaInfo[] resourcesDirMetaInfo) {
+        this.resourcesDirMetaInfo = resourcesDirMetaInfo;
+    }
+
+    public FileMetaInfo[] getGeneratedMetaInfo() {
+        return generatedDirMetaInfo;
+    }
+
+    public void setGeneratedMetaInfo(FileMetaInfo[] generatedDirMetaInfo) {
+        this.generatedDirMetaInfo = generatedDirMetaInfo;
+    }
+
+    public static class FileMetaInfo {
+        private String file;
+        private String hash;
+        private long size;
+        private long lastModifiedTime;
+
+        public String getFile() {
+            return file;
+        }
+
+        public void setFile(String file) {
+            this.file = file;
+        }
+
+        public String getHash() {
+            return hash;
+        }
+
+        public void setHash(String hash) {
+            this.hash = hash;
+        }
+
+        public long getSize() {
+            return size;
+        }
+
+        public void setSize(long size) {
+            this.size = size;
+        }
+
+        public long getLastModifiedTime() {
+            return lastModifiedTime;
+        }
+
+        public void setLastModifiedTime(long lastModifiedTime) {
+            this.lastModifiedTime = lastModifiedTime;
+        }
     }
 }

@@ -4,6 +4,7 @@
     "character": 24
   },
   "source": "variable-declaration/source/var_def_ctx_source18.bal",
+  "description": "",
   "items": [
     {
       "label": "ballerina/lang.array",
@@ -459,6 +460,14 @@
       "detail": "Typedesc",
       "sortText": "P",
       "insertText": "typedesc",
+      "insertTextFormat": "Snippet"
+    },
+    {
+      "label": "natural",
+      "kind": "Unit",
+      "detail": "type",
+      "sortText": "R",
+      "insertText": "natural",
       "insertTextFormat": "Snippet"
     }
   ]

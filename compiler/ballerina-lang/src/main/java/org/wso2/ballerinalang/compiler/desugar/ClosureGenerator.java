@@ -24,6 +24,7 @@ import org.ballerinalang.model.elements.Flag;
 import org.ballerinalang.model.elements.PackageID;
 import org.ballerinalang.model.symbols.SymbolKind;
 import org.ballerinalang.model.tree.NodeKind;
+import org.ballerinalang.model.tree.TopLevelNode;
 import org.ballerinalang.model.tree.expressions.RecordLiteralNode;
 import org.wso2.ballerinalang.compiler.semantics.analyzer.SymbolResolver;
 import org.wso2.ballerinalang.compiler.semantics.analyzer.Types;
@@ -111,6 +112,7 @@ import org.wso2.ballerinalang.compiler.tree.expressions.BLangMarkdownParameterDo
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangMarkdownReturnParameterDocumentation;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangMultipleWorkerReceive;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangNamedArgsExpression;
+import org.wso2.ballerinalang.compiler.tree.expressions.BLangNaturalExpression;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangNumericLiteral;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangObjectConstructorExpression;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangQueryAction;
@@ -207,6 +209,7 @@ import org.wso2.ballerinalang.compiler.util.Names;
 import org.wso2.ballerinalang.util.Flags;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -272,7 +275,7 @@ public class ClosureGenerator extends BLangNodeVisitor {
         pkgNode.constants.forEach(constant -> rewrite(constant, pkgEnv));
         pkgNode.annotations.forEach(annotation -> rewrite(annotation, pkgEnv));
         pkgNode.initFunction = rewrite(pkgNode.initFunction, pkgEnv);
-        pkgNode.classDefinitions = rewrite(pkgNode.classDefinitions, pkgEnv);
+        rewrite(pkgNode.classDefinitions, pkgEnv);
         rewrite(pkgNode.globalVars, pkgEnv);
         addClosuresToGlobalVariableList(pkgEnv);
         for (int i = 0; i < pkgNode.functions.size(); i++) {
@@ -292,9 +295,12 @@ public class ClosureGenerator extends BLangNodeVisitor {
             simpleVariable.flagSet.add(Flag.PUBLIC);
             simpleVariable.symbol.flags |= Flags.PUBLIC;
             pkgEnv.enclPkg.globalVars.add(0, simpleVariable);
+            pkgEnv.enclPkg.topLevelNodes.add(0, simpleVariable);
         }
         for (BLangSimpleVariableDef closureReference : annotationClosureReferences) {
-            pkgEnv.enclPkg.globalVars.add(rewrite(closureReference.var, pkgEnv));
+            BLangSimpleVariable simpleVariable = rewrite(closureReference.var, pkgEnv);
+            pkgEnv.enclPkg.globalVars.add(simpleVariable);
+            pkgEnv.enclPkg.topLevelNodes.add(simpleVariable);
         }
     }
 
@@ -692,11 +698,11 @@ public class ClosureGenerator extends BLangNodeVisitor {
     private BVarSymbol createSimpleVariable(BInvokableSymbol invokableSymbol, boolean isAnnotationClosure) {
         BType type = invokableSymbol.retType;
         Location pos = invokableSymbol.pos;
-        Name name = invokableSymbol.name;
-        BVarSymbol varSymbol = new BVarSymbol(0, name, invokableSymbol.originalName, invokableSymbol.pkgID, type,
-                                              invokableSymbol.owner, pos, VIRTUAL);
+        Name name = Names.fromString(invokableSymbol.name + "$annotations");
+        BVarSymbol varSymbol = new BVarSymbol(0, name, name, invokableSymbol.pkgID, type, invokableSymbol.owner, pos,
+                VIRTUAL);
         BLangSimpleVariableDef variableDef = createSimpleVariableDef(pos, name.value, type,
-                                                                     getInvocation(invokableSymbol), varSymbol);
+                getInvocation(invokableSymbol), varSymbol);
         addToQueue(variableDef, isAnnotationClosure);
         return varSymbol;
     }
@@ -1792,6 +1798,14 @@ public class ClosureGenerator extends BLangNodeVisitor {
         /* Ignore */
     }
 
+    @Override
+    public void visit(BLangNaturalExpression naturalExpression) {
+        rewriteExprs(naturalExpression.arguments);
+        rewriteExprs(naturalExpression.strings);
+        rewriteExprs(naturalExpression.insertions);
+        result = naturalExpression;
+    }
+
     // Rewrite methods
 
     @SuppressWarnings("unchecked")
@@ -1818,9 +1832,15 @@ public class ClosureGenerator extends BLangNodeVisitor {
         for (int i = 0; i < size; i++) {
             E node = rewrite(nodeList.remove(0), env);
             Iterator<BLangSimpleVariableDef> iterator = annotationClosureReferences.iterator();
+            List<E> closureList = new ArrayList<>();
             while (iterator.hasNext()) {
-                nodeList.add(rewrite((E) annotationClosureReferences.poll().var, env));
+                E simpleVariable = rewrite((E) annotationClosureReferences.poll().var, env);
+                closureList.add(simpleVariable);
             }
+            // Add closures before the dependent node in the top-level node list
+            int indexAtTopLevel = env.enclPkg.topLevelNodes.indexOf(node);
+            env.enclPkg.topLevelNodes.addAll(indexAtTopLevel, (Collection<? extends TopLevelNode>) closureList);
+            nodeList.addAll(closureList);
             nodeList.add(node);
         }
         this.annotationClosureReferences = previousQueue;

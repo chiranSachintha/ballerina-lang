@@ -25,6 +25,7 @@ import io.ballerina.projects.PackageName;
 import io.ballerina.projects.PackageOrg;
 import io.ballerina.projects.PackageVersion;
 import io.ballerina.projects.SemanticVersion.VersionCompatibilityResult;
+import io.ballerina.projects.environment.PackageRepository;
 import io.ballerina.projects.internal.repositories.AbstractPackageRepository;
 import io.ballerina.projects.internal.repositories.MavenPackageRepository;
 import io.ballerina.projects.util.ProjectConstants;
@@ -74,11 +75,11 @@ public class BlendedManifest {
                     BUILTIN_PACKAGE_VERSION : pkgInDepManifest.version();
             depContainer.add(pkgOrg, pkgName, new Dependency(pkgOrg, pkgName, pkgVersion,
                     getRelation(pkgInDepManifest.isTransitive()),
-                    REPOSITORY_NOT_SPECIFIED, moduleNames(pkgInDepManifest), DependencyOrigin.LOCKED));
+                    REPOSITORY_NOT_SPECIFIED, moduleNames(pkgInDepManifest), DependencyOrigin.LOCKED, false));
         }
 
         for (PackageManifest.Dependency depInPkgManifest : packageManifest.dependencies()) {
-            AbstractPackageRepository targetRepository = localPackageRepository;
+            PackageRepository targetRepository = localPackageRepository;
             Optional<Dependency> existingDepOptional = depContainer.get(
                     depInPkgManifest.org(), depInPkgManifest.name());
             Repository depInPkgManifestRepo = depInPkgManifest.repository() != null &&
@@ -99,7 +100,6 @@ public class BlendedManifest {
                     continue;
                 }
 
-
                 if (depInPkgManifest.repository().equals(ProjectConstants.LOCAL_REPOSITORY_NAME) &&
                         !localPackageRepository.isPackageExists(depInPkgManifest.org(), depInPkgManifest.name(),
                         depInPkgManifest.version())) {
@@ -117,46 +117,56 @@ public class BlendedManifest {
 
                 if (!depInPkgManifest.repository().equals(ProjectConstants.LOCAL_REPOSITORY_NAME)) {
                     targetRepository = mavenPackageRepositoryMap.get(depInPkgManifest.repository());
-                    if (!((MavenPackageRepository) targetRepository).isPackageExists(depInPkgManifest.org(),
-                            depInPkgManifest.name(), depInPkgManifest.version(), offline)) {
-                        var diagnosticInfo = new DiagnosticInfo(
-                                ProjectDiagnosticErrorCode.PACKAGE_NOT_FOUND.diagnosticId(),
-                                "Dependency version (" + depInPkgManifest.version() +
-                                        ") cannot be found in the custom repository (" +
-                                        depInPkgManifest.repository() + "). " +
-                                        "org: `" + depInPkgManifest.org() + "` name: " + depInPkgManifest.name() + "",
-                                DiagnosticSeverity.WARNING);
-                        PackageDiagnostic diagnostic = new PackageDiagnostic(
-                                diagnosticInfo, depInPkgManifest.location().orElseThrow());
-                        diagnostics.add(diagnostic);
-                        continue;
-                    }
                 }
             } else {
                 Collection<String> moduleNames = existingDepOptional.isPresent() ?
                         existingDepOptional.get().modules : Collections.emptyList();
+                Optional<Dependency> dependency = depContainer.get(depInPkgManifest.org(), depInPkgManifest.name());
+                if (dependency.isPresent() && dependency.get().version().compareTo(depInPkgManifest.version())
+                        == VersionCompatibilityResult.GREATER_THAN) {
+                    continue;
+                }
                 depContainer.add(depInPkgManifest.org(), depInPkgManifest.name(), new Dependency(
                         depInPkgManifest.org(), depInPkgManifest.name(), depInPkgManifest.version(),
                         DependencyRelation.UNKNOWN, REPOSITORY_NOT_SPECIFIED,
-                        moduleNames, DependencyOrigin.USER_SPECIFIED));
+                        moduleNames, DependencyOrigin.USER_SPECIFIED, depInPkgManifest.skipWorkspace()));
                 continue;
             }
 
             if (existingDepOptional.isEmpty()) {
+                Collection<String> moduleNames;
+                if (depInPkgManifest.repository().equals(ProjectConstants.LOCAL_REPOSITORY_NAME)) {
+                    moduleNames = moduleNames(depInPkgManifest, localPackageRepository);
+                } else if (targetRepository instanceof MavenPackageRepository) {
+                    moduleNames = moduleNames(depInPkgManifest, (MavenPackageRepository) targetRepository);
+                } else {
+                    // This should not be reached since the repo type is either maven or local
+                    moduleNames = Collections.emptyList();
+                }
                 depContainer.add(depInPkgManifest.org(), depInPkgManifest.name(),
                         new Dependency(depInPkgManifest.org(),
                                 depInPkgManifest.name(), depInPkgManifest.version(), DependencyRelation.UNKNOWN,
-                                depInPkgManifestRepo, moduleNames(depInPkgManifest, targetRepository),
-                                DependencyOrigin.USER_SPECIFIED));
+                                depInPkgManifestRepo, moduleNames,
+                                DependencyOrigin.USER_SPECIFIED, depInPkgManifest.skipWorkspace()));
             } else {
                 Dependency existingDep = existingDepOptional.get();
                 VersionCompatibilityResult compatibilityResult =
                         depInPkgManifest.version().compareTo(existingDep.version());
                 if (compatibilityResult == VersionCompatibilityResult.EQUAL ||
                         compatibilityResult == VersionCompatibilityResult.GREATER_THAN) {
+                    Collection<String> moduleNames;
+                    if (depInPkgManifest.repository().equals(ProjectConstants.LOCAL_REPOSITORY_NAME)) {
+                        moduleNames = moduleNames(depInPkgManifest, localPackageRepository);
+                    } else if (targetRepository instanceof MavenPackageRepository) {
+                        moduleNames = moduleNames(depInPkgManifest, (MavenPackageRepository) targetRepository);
+                    } else {
+                        // This should not be reached since the repo type is either maven or local
+                        moduleNames = Collections.emptyList();
+                    }
                     Dependency newDep = new Dependency(depInPkgManifest.org(), depInPkgManifest.name(),
                             depInPkgManifest.version(), DependencyRelation.UNKNOWN, depInPkgManifestRepo,
-                            moduleNames(depInPkgManifest, targetRepository), DependencyOrigin.USER_SPECIFIED);
+                            moduleNames, DependencyOrigin.USER_SPECIFIED,
+                            depInPkgManifest.skipWorkspace());
                     depContainer.add(depInPkgManifest.org(), depInPkgManifest.name(), newDep);
                 } else if (compatibilityResult == VersionCompatibilityResult.INCOMPATIBLE) {
                     DiagnosticInfo diagnosticInfo = new DiagnosticInfo(
@@ -164,14 +174,14 @@ public class BlendedManifest {
                             "Dependency version (" + depInPkgManifest.version() + ") " +
                                     "is incompatible with the version locked in Dependencies.toml ("
                                     + existingDep.version + "). " +
-                                    "org: `" + existingDep.org() + "` name: " + existingDep.name() + "",
+                                    "org: `" + existingDep.org() + "` name: " + existingDep.name(),
                             DiagnosticSeverity.ERROR);
                     PackageDiagnostic diagnostic = new PackageDiagnostic(
                             diagnosticInfo, depInPkgManifest.location().orElseThrow());
                     diagnostics.add(diagnostic);
                     Dependency newDep = new Dependency(existingDep.org(), existingDep.name(),
                             existingDep.version(), existingDep.relation, existingDep.repository,
-                            existingDep.modules, existingDep.origin, true);
+                            existingDep.modules, existingDep.origin, true, existingDep.skipWorkspace);
                     depContainer.add(depInPkgManifest.org(), depInPkgManifest.name(), newDep);
                 }
             }
@@ -192,9 +202,32 @@ public class BlendedManifest {
     }
 
     private static Collection<String> moduleNames(PackageManifest.Dependency dependency,
-                                                  AbstractPackageRepository localPackageRepository) {
-        Collection<ModuleDescriptor> moduleDescriptors = localPackageRepository.getModules(
+                                                  MavenPackageRepository packageRepository) {
+        Collection<ModuleDescriptor> moduleDescriptors;
+        boolean isExists = packageRepository.isPackageExists(
                 dependency.org(), dependency.name(), dependency.version());
+        if (!isExists) {
+            return Collections.emptyList();
+        }
+        moduleDescriptors = packageRepository.getModules(
+                dependency.org(), dependency.name(), dependency.version());
+
+        return moduleDescriptors.stream()
+                .map(moduleDesc -> moduleDesc.name().toString())
+                .toList();
+    }
+
+    private static Collection<String> moduleNames(PackageManifest.Dependency dependency,
+                                                  AbstractPackageRepository packageRepository) {
+        Collection<ModuleDescriptor> moduleDescriptors;
+        boolean isExists = packageRepository.isPackageExists(
+                dependency.org(), dependency.name(), dependency.version());
+        if (!isExists) {
+            return Collections.emptyList();
+        }
+        moduleDescriptors = packageRepository.getModules(
+                dependency.org(), dependency.name(), dependency.version());
+
         return moduleDescriptors.stream()
                 .map(moduleDesc -> moduleDesc.name().toString())
                 .toList();
@@ -257,6 +290,7 @@ public class BlendedManifest {
         private final Collection<String> modules;
         private final DependencyOrigin origin;
         private final boolean isError;
+        private final boolean skipWorkspace;
 
 
         private Dependency(PackageOrg org,
@@ -264,7 +298,9 @@ public class BlendedManifest {
                            PackageVersion version,
                            DependencyRelation relation,
                            Repository repository,
-                           Collection<String> modules, DependencyOrigin origin) {
+                           Collection<String> modules,
+                           DependencyOrigin origin,
+                           boolean skipWorkspace) {
             this.org = org;
             this.name = name;
             this.version = version;
@@ -273,6 +309,7 @@ public class BlendedManifest {
             this.modules = modules;
             this.origin = origin;
             this.isError = false;
+            this.skipWorkspace = skipWorkspace;
         }
 
         private Dependency(PackageOrg org,
@@ -282,7 +319,8 @@ public class BlendedManifest {
                            Repository repository,
                            Collection<String> modules,
                            DependencyOrigin origin,
-                           boolean isError) {
+                           boolean isError,
+                           boolean skipWorkspace) {
             this.org = org;
             this.name = name;
             this.version = version;
@@ -291,6 +329,7 @@ public class BlendedManifest {
             this.modules = modules;
             this.origin = origin;
             this.isError = isError;
+            this.skipWorkspace = skipWorkspace;
         }
 
         public PackageName name() {
@@ -332,6 +371,10 @@ public class BlendedManifest {
 
         public boolean isError() {
             return isError;
+        }
+
+        public boolean skipWorkspace() {
+            return skipWorkspace;
         }
     }
 

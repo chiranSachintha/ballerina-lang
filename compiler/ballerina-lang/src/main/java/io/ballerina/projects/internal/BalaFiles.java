@@ -166,13 +166,7 @@ public final class BalaFiles {
         if (Files.notExists(documentFilePath)) {
             return null;
         } else {
-            String content;
-            try {
-                content = Files.readString(documentFilePath, Charset.defaultCharset());
-            } catch (IOException e) {
-                throw new ProjectException(e);
-            }
-            return DocumentData.from(Optional.of(documentFilePath.getFileName()).get().toString(), content);
+            return ProjectFiles.getDocumentData(documentFilePath, false, Charset.defaultCharset());
         }
     }
 
@@ -357,11 +351,10 @@ public final class BalaFiles {
                 throw new ProjectException("unable to read content from the file '" + DEPRECATED_META_FILE_NAME +
                         "'", e);
             }
-            if (!fileContents.isEmpty()) {
-                return fileContents.substring(0, fileContents.length() - 1);
-            } else {
+            if (fileContents.isEmpty()) {
                 return "";
             }
+            return fileContents.substring(0, fileContents.length() - 1);
         }
         return null;
     }

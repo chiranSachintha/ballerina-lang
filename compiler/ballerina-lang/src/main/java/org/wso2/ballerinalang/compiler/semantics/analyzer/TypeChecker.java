@@ -143,6 +143,7 @@ import org.wso2.ballerinalang.compiler.tree.expressions.BLangListConstructorExpr
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangLiteral;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangMultipleWorkerReceive;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangNamedArgsExpression;
+import org.wso2.ballerinalang.compiler.tree.expressions.BLangNaturalExpression;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangNumericLiteral;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangObjectConstructorExpression;
 import org.wso2.ballerinalang.compiler.tree.expressions.BLangQueryAction;
@@ -237,6 +238,8 @@ import static io.ballerina.types.Core.getComplexSubtypeData;
 import static io.ballerina.types.Core.widenToBasicTypes;
 import static org.ballerinalang.model.symbols.SymbolOrigin.SOURCE;
 import static org.ballerinalang.model.symbols.SymbolOrigin.VIRTUAL;
+import static org.ballerinalang.util.diagnostic.DiagnosticErrorCode.EXPECTED_A_SINGLE_ARG_OF_TYPE_GENERATOR_IN_A_NATURAL_EXPR;
+import static org.ballerinalang.util.diagnostic.DiagnosticErrorCode.EXPECTED_NO_ARGS_IN_A_CONST_NATURAL_EXPR;
 import static org.ballerinalang.util.diagnostic.DiagnosticErrorCode.INVALID_NUM_INSERTIONS;
 import static org.ballerinalang.util.diagnostic.DiagnosticErrorCode.INVALID_NUM_STRINGS;
 import static org.wso2.ballerinalang.compiler.tree.BLangInvokableNode.DEFAULT_WORKER_NAME;
@@ -6643,6 +6646,71 @@ public class TypeChecker extends SimpleBLangNodeAnalyzer<TypeChecker.AnalyzerDat
         data.resultType = this.types.checkType(annotAccessExpr, actualType, data.expType);
     }
 
+    @Override
+    public void visit(BLangNaturalExpression naturalExpression, AnalyzerData data) {
+        BType type = data.expType;
+        SemType expTypeSemType = type.semType();
+        boolean isConstNaturalExpr = naturalExpression.isConstExpr;
+
+        if (!isConstNaturalExpr && !types.isSubtype(symTable.errorType, expTypeSemType)) {
+            dlog.error(naturalExpression.pos, DiagnosticErrorCode.EXPECTED_TYPE_FOR_NATURAL_EXPR_MUST_CONTAIN_ERROR);
+            type = symTable.semanticError;
+        } else if (types.isSubtype(expTypeSemType, symTable.errorType.semType())) {
+            dlog.error(naturalExpression.pos, isConstNaturalExpr ?
+                    DiagnosticErrorCode.EXPECTED_TYPE_FOR_CONST_NATURAL_EXPR_MUST_BE_A_SUBTYPE_OF_ANYDATA :
+                    DiagnosticErrorCode.EXPECTED_TYPE_FOR_NATURAL_EXPR_MUST_CONTAIN_A_UNION_OF_NON_ERROR_AND_ERROR);
+            type = symTable.semanticError;
+        }
+
+        SemType errorLiftedType = types.getErrorLiftType(expTypeSemType);
+        if (isConstNaturalExpr) {
+            if (!types.isSubtype(errorLiftedType, symTable.anydataType.semType())) {
+                dlog.error(naturalExpression.pos,
+                        DiagnosticErrorCode.EXPECTED_TYPE_FOR_CONST_NATURAL_EXPR_MUST_BE_A_SUBTYPE_OF_ANYDATA);
+                type = symTable.semanticError;
+            }
+        } else if (!types.isSubtype(errorLiftedType, symTable.pureType.semType())) {
+            dlog.error(naturalExpression.pos,
+                    DiagnosticErrorCode.EXPECTED_TYPE_FOR_NATURAL_EXPR_MUST_BE_A_SUBTYPE_OF_ANYDATA_OR_ERROR);
+            type = symTable.semanticError;
+        }
+        checkNaturalExprArguments(naturalExpression, data);
+        checkNaturalExprInsertions(naturalExpression, data);
+        data.resultType = type;
+    }
+
+    private void checkNaturalExprArguments(BLangNaturalExpression naturalExpression, AnalyzerData data) {
+        List<BLangExpression> arguments = naturalExpression.arguments;
+        int size = arguments.size();
+
+        if (naturalExpression.isConstExpr) {
+            if (arguments.isEmpty()) {
+                return;
+            }
+            dlog.error(arguments.getFirst().pos, EXPECTED_NO_ARGS_IN_A_CONST_NATURAL_EXPR, size);
+            for (BLangExpression argument : arguments) {
+                checkExpr(argument, symTable.anyType, data);
+            }
+            return;
+        }
+
+        if (size == 0) {
+            dlog.error(naturalExpression.pos, EXPECTED_A_SINGLE_ARG_OF_TYPE_GENERATOR_IN_A_NATURAL_EXPR, size);
+            return;
+        }
+
+        checkExpr(arguments.getFirst(), symTable.naturalGeneratorType, data);
+
+        if (size == 1) {
+            return;
+        }
+
+        dlog.error(naturalExpression.pos, EXPECTED_A_SINGLE_ARG_OF_TYPE_GENERATOR_IN_A_NATURAL_EXPR, size);
+        for (int i = 0; i < size; i++) {
+            checkExpr(arguments.get(i), symTable.anyType, data);
+        }
+    }
+
     // Private methods
 
     private boolean isValidVariableReference(BLangExpression varRef) {
@@ -7988,7 +8056,6 @@ public class TypeChecker extends SimpleBLangNodeAnalyzer<TypeChecker.AnalyzerDat
 
         if (computedKey) {
             checkExpr(keyExpr, symTable.stringType, data);
-
             if (keyExpr.getBType() == symTable.semanticError) {
                 return new TypeSymbolPair(null, symTable.semanticError);
             }
@@ -8053,7 +8120,6 @@ public class TypeChecker extends SimpleBLangNodeAnalyzer<TypeChecker.AnalyzerDat
     private boolean checkValidJsonOrMapLiteralKeyExpr(BLangExpression keyExpr, boolean computedKey, AnalyzerData data) {
         if (computedKey) {
             checkExpr(keyExpr, symTable.stringType, data);
-
             if (keyExpr.getBType() == symTable.semanticError) {
                 return false;
             }
@@ -9938,6 +10004,16 @@ public class TypeChecker extends SimpleBLangNodeAnalyzer<TypeChecker.AnalyzerDat
     public void restoreGlobalState(GlobalStateSnapshot globalStateSnapshot) {
         typeResolver.setUnknownTypeRefs(globalStateSnapshot.unknownTypeRefs);
         this.dlog.setErrorCount(globalStateSnapshot.errorCount);
+    }
+
+    private void checkNaturalExprInsertions(BLangNaturalExpression naturalExpression, AnalyzerData data) {
+        boolean isConstNaturalExpr = naturalExpression.isConstExpr;
+        for (BLangExpression expr : naturalExpression.insertions) {
+            checkExpr(expr, symTable.anydataType, data);
+            if (isConstNaturalExpr && !isConstExpression(expr)) {
+                dlog.error(expr.pos, DiagnosticErrorCode.CONST_NATURAL_EXPR_CAN_HAVE_ONLY_CONST_EXPR_INSERTION);
+            }
+        }
     }
 
     /**

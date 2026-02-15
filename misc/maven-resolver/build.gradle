@@ -32,11 +32,21 @@ jar {
         )
     }
     from {
-        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+        configurations.runtimeClasspath.collect { 
+            if (it.isDirectory()) {
+                it 
+            } else if (!it.name.matches(/^(gson|netty).+\.jar$/)) {
+                zipTree(it)
+            } else {
+                null
+            }
+        }.findAll { it != null }
     }
 }
 
 dependencies {
+    implementation libs.gson
+    implementation libs.findbugs.jsr305
     implementation libs.apache.maven.provider
     implementation libs.apache.maven.api
     implementation libs.apache.maven.spi
