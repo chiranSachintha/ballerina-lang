@@ -17,8 +17,6 @@
  */
 package io.ballerina.projects.internal.repositories;
 
-import com.github.zafarkhaja.semver.UnexpectedCharacterException;
-import com.github.zafarkhaja.semver.Version;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import io.ballerina.projects.DependencyGraph;
@@ -364,19 +362,17 @@ public class MavenPackageRepository implements PackageRepository {
         if (pkgBalVer.equals(distBalVer) || pkgBalVer.startsWith("slbeta")) {
             return true;
         }
-        Version pkgSemVer;
-        Version distSemVer;
         try {
-            pkgSemVer = Version.valueOf(pkgBalVer);
-            distSemVer = Version.valueOf(distBalVer);
+            SemanticVersion pkgSemVer = SemanticVersion.from(pkgBalVer);
+            SemanticVersion distSemVer = SemanticVersion.from(distBalVer);
 
-            if (pkgSemVer.getMajorVersion() == distSemVer.getMajorVersion()) {
-                if (pkgSemVer.getMinorVersion() == distSemVer.getMinorVersion()) {
+            if (pkgSemVer.major() == distSemVer.major()) {
+                if (pkgSemVer.minor() == distSemVer.minor()) {
                     return true;
                 }
                 return !pkgSemVer.greaterThan(distSemVer);
             }
-        } catch (UnexpectedCharacterException ignore) {
+        } catch (ProjectException ignore) {
             // SemVer incompatible versions will throw this exception.
             // Catching this is mainly to handle slalpha versions
         }

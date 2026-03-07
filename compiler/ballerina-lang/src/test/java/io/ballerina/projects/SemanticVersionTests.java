@@ -78,6 +78,24 @@ public class SemanticVersionTests {
     }
 
     @Test
+    public void testFourPartVersions() {
+        SemanticVersion version = SemanticVersion.from("2201.13.2.2");
+        Assert.assertEquals(version.major(), 2201);
+        Assert.assertEquals(version.minor(), 13);
+        Assert.assertEquals(version.patch(), 2);
+        Assert.assertEquals(version.fourthPart(), 2);
+        Assert.assertEquals(version.toString(), "2201.13.2.2");
+        Assert.assertTrue(version.isStable());
+
+        version = SemanticVersion.from("2201.13.2.2-alpha.1+build.5");
+        Assert.assertEquals(version.fourthPart(), 2);
+        Assert.assertEquals(version.preReleasePart(), "alpha.1");
+        Assert.assertEquals(version.buildMetadata(), "build.5");
+        Assert.assertEquals(version.toString(), "2201.13.2.2-alpha.1+build.5");
+        Assert.assertFalse(version.isStable());
+    }
+
+    @Test
     public void testInitialVersions() {
         SemanticVersion version = SemanticVersion.from("0.1.0-alpha");
         Assert.assertEquals(version.major(), 0);

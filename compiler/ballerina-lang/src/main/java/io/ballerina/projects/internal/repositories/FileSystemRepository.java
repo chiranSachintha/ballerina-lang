@@ -17,8 +17,6 @@
  */
 package io.ballerina.projects.internal.repositories;
 
-import com.github.zafarkhaja.semver.UnexpectedCharacterException;
-import com.github.zafarkhaja.semver.Version;
 import io.ballerina.projects.DependencyGraph;
 import io.ballerina.projects.JvmTarget;
 import io.ballerina.projects.ModuleDescriptor;
@@ -30,6 +28,7 @@ import io.ballerina.projects.PackageVersion;
 import io.ballerina.projects.Project;
 import io.ballerina.projects.ProjectEnvironmentBuilder;
 import io.ballerina.projects.ProjectException;
+import io.ballerina.projects.SemanticVersion;
 import io.ballerina.projects.bala.BalaProject;
 import io.ballerina.projects.environment.Environment;
 import io.ballerina.projects.environment.ResolutionOptions;
@@ -267,19 +266,17 @@ public class FileSystemRepository extends AbstractPackageRepository {
         if (pkgBalVer.equals(distBalVer) || pkgBalVer.startsWith("slbeta")) {
             return true;
         }
-        Version pkgSemVer;
-        Version distSemVer;
         try {
-            pkgSemVer = Version.valueOf(pkgBalVer);
-            distSemVer = Version.valueOf(distBalVer);
+            SemanticVersion pkgSemVer = SemanticVersion.from(pkgBalVer);
+            SemanticVersion distSemVer = SemanticVersion.from(distBalVer);
 
-            if (pkgSemVer.getMajorVersion() == distSemVer.getMajorVersion()) {
-                if (pkgSemVer.getMinorVersion() == distSemVer.getMinorVersion()) {
+            if (pkgSemVer.major() == distSemVer.major()) {
+                if (pkgSemVer.minor() == distSemVer.minor()) {
                     return true;
                 }
                 return !pkgSemVer.greaterThan(distSemVer);
             }
-        } catch (UnexpectedCharacterException ignore) {
+        } catch (ProjectException ignore) {
             // SemVer incompatible versions will throw this exception.
             // Catching this is mainly to handle slalpha versions
         }

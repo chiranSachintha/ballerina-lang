@@ -18,10 +18,11 @@
 package io.ballerina.projects;
 
 import com.github.zafarkhaja.semver.ParseException;
-import com.github.zafarkhaja.semver.UnexpectedCharacterException;
 import com.github.zafarkhaja.semver.Version;
 
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Represents a semantic version according to the semvar specification.
@@ -29,43 +30,84 @@ import java.util.Objects;
  * @since 2.0.0
  */
 public class SemanticVersion {
-    private final Version version;
+    private static final Pattern VERSION_PATTERN = Pattern.compile(
+            "^(\\d+)\\.(\\d+)\\.(\\d+)(?:\\.(\\d+))?(?:-([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?"
+                    + "(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?$");
+    private static final int DEFAULT_FOURTH_PART = 0;
 
-    private SemanticVersion(Version version) {
-        this.version = version;
+    private final Version semVer;
+    private final int major;
+    private final int minor;
+    private final int patch;
+    private final int fourthPart;
+    private final String originalVersion;
+
+    private SemanticVersion(Version semVer, int major, int minor, int patch, int fourthPart, String originalVersion) {
+        this.semVer = semVer;
+        this.major = major;
+        this.minor = minor;
+        this.patch = patch;
+        this.fourthPart = fourthPart;
+        this.originalVersion = originalVersion;
     }
 
     public static SemanticVersion from(String versionString) {
-        try {
-            Version v = Version.valueOf(versionString);
-            return new SemanticVersion(v);
-        } catch (IllegalArgumentException e) {
+        if (versionString == null || versionString.trim().isEmpty()) {
             throw new ProjectException("Version cannot be empty");
-        } catch (UnexpectedCharacterException e) {
-            throw new ProjectException("Invalid version: '" + versionString + "'. " + e.toString());
+        }
+
+        Matcher matcher = VERSION_PATTERN.matcher(versionString);
+        if (!matcher.matches()) {
+            throw new ProjectException("Invalid version: '" + versionString + "'.");
+        }
+
+        try {
+            int major = Integer.parseInt(matcher.group(1));
+            int minor = Integer.parseInt(matcher.group(2));
+            int patch = Integer.parseInt(matcher.group(3));
+            String fourthPartString = matcher.group(4);
+            int fourthPart = fourthPartString != null ? Integer.parseInt(fourthPartString) : DEFAULT_FOURTH_PART;
+
+            StringBuilder semVerText = new StringBuilder()
+                    .append(major).append('.').append(minor).append('.').append(patch);
+            if (matcher.group(5) != null) {
+                semVerText.append('-').append(matcher.group(5));
+            }
+            if (matcher.group(6) != null) {
+                semVerText.append('+').append(matcher.group(6));
+            }
+
+            Version semVer = Version.valueOf(semVerText.toString());
+            return new SemanticVersion(semVer, major, minor, patch, fourthPart, versionString);
+        } catch (NumberFormatException e) {
+            throw new ProjectException("Invalid version: '" + versionString + "'. " + e.getMessage());
         } catch (ParseException e) {
             throw new ProjectException("Invalid version: '" + versionString + "'. " + e.toString());
         }
     }
 
     public int major() {
-        return version.getMajorVersion();
+        return major;
     }
 
     public int minor() {
-        return version.getMinorVersion();
+        return minor;
     }
 
     public int patch() {
-        return version.getPatchVersion();
+        return patch;
+    }
+
+    public int fourthPart() {
+        return fourthPart;
     }
 
     public String preReleasePart() {
-        return version.getPreReleaseVersion();
+        return semVer.getPreReleaseVersion();
     }
 
     public String buildMetadata() {
-        return version.getBuildMetadata();
+        return semVer.getBuildMetadata();
     }
 
     public boolean isStable() {
@@ -77,7 +119,7 @@ public class SemanticVersion {
     }
 
     public boolean isPreReleaseVersion() {
-        String preReleaseComp = version.getPreReleaseVersion();
+        String preReleaseComp = semVer.getPreReleaseVersion();
         return preReleaseComp != null && !preReleaseComp.trim().isEmpty();
     }
 
@@ -86,19 +128,19 @@ public class SemanticVersion {
     }
 
     public boolean greaterThan(SemanticVersion other) {
-        return this.version.greaterThan(other.version);
+        return this.comparePrecedence(other) > 0;
     }
 
     public boolean greaterThanOrEqualTo(SemanticVersion other) {
-        return this.version.greaterThanOrEqualTo(other.version);
+        return this.comparePrecedence(other) >= 0;
     }
 
     public boolean lessThan(SemanticVersion other) {
-        return this.version.lessThan(other.version);
+        return this.comparePrecedence(other) < 0;
     }
 
     public boolean lessThanOrEqualTo(SemanticVersion other) {
-        return this.version.lessThanOrEqualTo(other.version);
+        return this.comparePrecedence(other) <= 0;
     }
 
     @Override
@@ -112,17 +154,17 @@ public class SemanticVersion {
         }
 
         SemanticVersion otherSemVer = (SemanticVersion) other;
-        return version.equals(otherSemVer.version);
+        return Objects.equals(originalVersion, otherSemVer.originalVersion);
     }
 
     @Override
     public String toString() {
-        return version.toString();
+        return originalVersion;
     }
 
     @Override
     public int hashCode() {
-        return version.hashCode();
+        return originalVersion.hashCode();
     }
 
     public VersionCompatibilityResult compareTo(SemanticVersion other) {
@@ -142,7 +184,7 @@ public class SemanticVersion {
 
         // We've eliminated initial versions and versions with different major component.
         // Now we just need to check minor, patch and pre-release components.
-        int result = this.version.compareTo(other.version);
+        int result = this.comparePrecedence(other);
         if (result < 0) {
             return VersionCompatibilityResult.LESS_THAN;
         } else {
@@ -160,5 +202,24 @@ public class SemanticVersion {
         EQUAL,
         LESS_THAN,
         GREATER_THAN
+    }
+
+    private int comparePrecedence(SemanticVersion other) {
+        Objects.requireNonNull(other);
+
+        if (this.major != other.major) {
+            return Integer.compare(this.major, other.major);
+        }
+        if (this.minor != other.minor) {
+            return Integer.compare(this.minor, other.minor);
+        }
+        if (this.patch != other.patch) {
+            return Integer.compare(this.patch, other.patch);
+        }
+        if (this.fourthPart != other.fourthPart) {
+            return Integer.compare(this.fourthPart, other.fourthPart);
+        }
+
+        return this.semVer.compareTo(other.semVer);
     }
 }

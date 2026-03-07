@@ -215,4 +215,19 @@ public class SemanticVersionComparisonTests {
         SemanticVersion v2 = SemanticVersion.from("1.1.0-alpha");
         Assert.assertEquals(VersionCompatibilityResult.GREATER_THAN, v1.compareTo(v2));
     }
+
+    @Test
+    public void testFourPartVersionComparison() {
+        SemanticVersion v1 = SemanticVersion.from("2201.13.2");
+        SemanticVersion v2 = SemanticVersion.from("2201.13.2.1");
+        Assert.assertEquals(v1.compareTo(v2), VersionCompatibilityResult.LESS_THAN);
+
+        v1 = SemanticVersion.from("2201.13.2.2");
+        v2 = SemanticVersion.from("2201.13.2.1");
+        Assert.assertEquals(v1.compareTo(v2), VersionCompatibilityResult.GREATER_THAN);
+
+        v1 = SemanticVersion.from("2201.13.2.1-alpha");
+        v2 = SemanticVersion.from("2201.13.2.1");
+        Assert.assertEquals(v1.compareTo(v2), VersionCompatibilityResult.LESS_THAN);
+    }
 }
