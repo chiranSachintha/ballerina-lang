@@ -7,21 +7,6 @@ permissions:
 
 on:
   workflow_dispatch:
-    inputs:
-      private_release:
-        description: 'Set true to publish a private release with a 4th version section (A.B.C.D)'
-        required: false
-        type: boolean
-        default: false
-      private_release_number:
-        description: '4th section value (D) for private release version A.B.C.D'
-        required: false
-        type: string
-      local_publish:
-        description: 'Set true to publish only to Maven local and skip tag/release/PR creation'
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   publish-release:
@@ -44,34 +29,14 @@ jobs:
           set-java-home: 'false'
       - name: Set version env variable
         run: |
-          BASE_VERSION=$(./gradlew properties | grep ^version: | cut -d\  -f2 | sed 's@-SNAPSHOT@@')
-          PRIVATE_RELEASE="${{ github.event.inputs.private_release }}"
-          PRIVATE_RELEASE_NUMBER="${{ github.event.inputs.private_release_number }}"
-          LOCAL_PUBLISH="${{ github.event.inputs.local_publish }}"
-
-          if [[ ! "$BASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Expected base version in A.B.C format, found: $BASE_VERSION"
-            exit 1
-          fi
-
-          if [[ "$PRIVATE_RELEASE" == "true" ]]; then
-            if [[ -z "$PRIVATE_RELEASE_NUMBER" || ! "$PRIVATE_RELEASE_NUMBER" =~ ^[0-9]+$ ]]; then
-              echo "For private releases, provide a numeric private_release_number (D in A.B.C.D)."
-              exit 1
-            fi
-            VERSION="${BASE_VERSION}.${PRIVATE_RELEASE_NUMBER}"
-          else
-            VERSION="${BASE_VERSION}"
-          fi
+          VERSION=$(./gradlew properties | grep ^version: | cut -d\  -f2 | sed 's@-SNAPSHOT@@')
 
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
-            echo "Generated invalid release version: $VERSION"
+            echo "Expected release version in A.B.C or A.B.C.D format, found: $VERSION"
             exit 1
           fi
 
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
-          echo "PRIVATE_RELEASE=${PRIVATE_RELEASE}" >> $GITHUB_ENV
-          echo "LOCAL_PUBLISH=${LOCAL_PUBLISH}" >> $GITHUB_ENV
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
       - name: Publish artifact
@@ -103,18 +68,9 @@ jobs:
           git config user.name "$GIT_USER"
           git config user.email "$GIT_EMAIL"
           git checkout -b release-${VERSION}
-          if [[ "$PRIVATE_RELEASE" == "true" ]]; then
-            ./gradlew build -x test -Pversion=${VERSION}
-          else
-            ./gradlew build -x :jballerina-debugger-integration-test:test -Pversion=${VERSION}
-          fi
-          if [[ "$LOCAL_PUBLISH" == "true" ]]; then
-            ./gradlew -Pversion=${VERSION} publishToMavenLocal -x test --continue
-          else
-            ./gradlew -Pversion=${VERSION} publish -x test --continue
-          fi
+          ./gradlew build -x :jballerina-debugger-integration-test:test -Pversion=${VERSION}
+          ./gradlew -Pversion=${VERSION} publish -x test --continue
       - name: Create Release Tag
-        if: ${{ env.LOCAL_PUBLISH != 'true' }}
         run: |
           GIT_USER="${{ secrets.BALLERINA_BOT_USERNAME }}"
           GIT_EMAIL="${{ secrets.BALLERINA_BOT_EMAIL }}"
@@ -131,34 +87,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - name: Create Github release from the release tag
-        if: ${{ env.LOCAL_PUBLISH != 'true' }}
         run: |
           RELEASE_TOKEN="${{ secrets.BALLERINA_BOT_TOKEN }}"
           if [[ -z "$RELEASE_TOKEN" ]]; then
             RELEASE_TOKEN="${{ github.token }}"
           fi
-          if [[ "$PRIVATE_RELEASE" == "true" ]]; then
-            curl --request POST 'https://api.github.com/repos/${{ github.repository }}/releases' \
-            --header 'Accept: application/vnd.github.v3+json' \
-            --header "Authorization: Bearer ${RELEASE_TOKEN}" \
-            --header 'Content-Type: application/json' \
-            --data-raw '{
-                "tag_name": "v'"$VERSION"'",
-                "name": "ballerina-lang-v'"$VERSION"'",
-                "prerelease": true
-            }'
-          else
-            curl --request POST 'https://api.github.com/repos/${{ github.repository }}/releases' \
-            --header 'Accept: application/vnd.github.v3+json' \
-            --header "Authorization: Bearer ${RELEASE_TOKEN}" \
-            --header 'Content-Type: application/json' \
-            --data-raw '{
-                "tag_name": "v'"$VERSION"'",
-                "name": "ballerina-lang-v'"$VERSION"'"
-            }'
-          fi
+          curl --request POST 'https://api.github.com/repos/${{ github.repository }}/releases' \
+          --header 'Accept: application/vnd.github.v3+json' \
+          --header "Authorization: Bearer ${RELEASE_TOKEN}" \
+          --header 'Content-Type: application/json' \
+          --data-raw '{
+              "tag_name": "v'"$VERSION"'",
+              "name": "ballerina-lang-v'"$VERSION"'"
+          }'
       - name: Post release PR
-        if: ${{ env.LOCAL_PUBLISH != 'true' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
