@@ -37,6 +37,7 @@ import io.ballerina.projects.environment.PackageRepository;
 import io.ballerina.projects.environment.ResolutionOptions;
 import io.ballerina.projects.environment.ResolutionRequest;
 import io.ballerina.projects.environment.ResolutionResponse;
+import io.ballerina.projects.internal.DistributionVersion;
 import io.ballerina.projects.internal.ImportModuleRequest;
 import io.ballerina.projects.internal.ImportModuleResponse;
 import io.ballerina.projects.internal.model.Proxy;
@@ -363,14 +364,14 @@ public class MavenPackageRepository implements PackageRepository {
             return true;
         }
         try {
-            SemanticVersion pkgSemVer = SemanticVersion.from(pkgBalVer);
-            SemanticVersion distSemVer = SemanticVersion.from(distBalVer);
+            DistributionVersion pkgVersion = DistributionVersion.from(pkgBalVer);
+            DistributionVersion distVersion = DistributionVersion.from(distBalVer);
 
-            if (pkgSemVer.major() == distSemVer.major()) {
-                if (pkgSemVer.minor() == distSemVer.minor()) {
+            if (pkgVersion.major() == distVersion.major()) {
+                if (pkgVersion.minor() == distVersion.minor()) {
                     return true;
                 }
-                return !pkgSemVer.greaterThan(distSemVer);
+                return !pkgVersion.greaterThan(distVersion);
             }
         } catch (ProjectException ignore) {
             // SemVer incompatible versions will throw this exception.

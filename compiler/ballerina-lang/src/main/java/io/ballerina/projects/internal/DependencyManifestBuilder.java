@@ -227,7 +227,8 @@ public class DependencyManifestBuilder {
                 return null;
             }
             try {
-                return SemanticVersion.from(distributionVersionString);
+                DistributionVersion distributionVersion = DistributionVersion.from(distributionVersionString);
+                return SemanticVersion.from(distributionVersion.toSemanticVersionString());
             } catch (ProjectException ignore) {
                 // Ignore the exception and return null
                 return null;
