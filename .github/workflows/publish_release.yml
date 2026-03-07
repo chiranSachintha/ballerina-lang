@@ -1,10 +1,5 @@
 name: Publish release
 
-permissions:
-  contents: write
-  pull-requests: write
-  packages: write
-
 on:
   workflow_dispatch:
     inputs:
@@ -17,11 +12,6 @@ on:
         description: '4th section value (D) for private release version A.B.C.D'
         required: false
         type: string
-      local_publish:
-        description: 'Set true to publish only to Maven local and skip tag/release/PR creation'
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   publish-release:
@@ -47,7 +37,6 @@ jobs:
           BASE_VERSION=$(./gradlew properties | grep ^version: | cut -d\  -f2 | sed 's@-SNAPSHOT@@')
           PRIVATE_RELEASE="${{ github.event.inputs.private_release }}"
           PRIVATE_RELEASE_NUMBER="${{ github.event.inputs.private_release_number }}"
-          LOCAL_PUBLISH="${{ github.event.inputs.local_publish }}"
 
           if [[ ! "$BASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Expected base version in A.B.C format, found: $BASE_VERSION"
@@ -71,76 +60,33 @@ jobs:
 
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
           echo "PRIVATE_RELEASE=${PRIVATE_RELEASE}" >> $GITHUB_ENV
-          echo "LOCAL_PUBLISH=${LOCAL_PUBLISH}" >> $GITHUB_ENV
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
       - name: Publish artifact
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          publishUser: ${{ secrets.BALLERINA_BOT_USERNAME }}
+          publishPAT: ${{ secrets.BALLERINA_BOT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.BALLERINA_BOT_TOKEN }}
         run: |
-          GIT_USER="${{ secrets.BALLERINA_BOT_USERNAME }}"
-          GIT_EMAIL="${{ secrets.BALLERINA_BOT_EMAIL }}"
-          PUBLISH_USER="${{ secrets.BALLERINA_BOT_USERNAME }}"
-          PUBLISH_PAT="${{ secrets.BALLERINA_BOT_TOKEN }}"
-          PUBLISH_REPO="${{ github.repository }}"
-          if [[ -z "$GIT_USER" ]]; then
-            GIT_USER="${{ github.actor }}"
-          fi
-          if [[ -z "$GIT_EMAIL" ]]; then
-            GIT_EMAIL="${{ github.actor }}@users.noreply.github.com"
-          fi
-          if [[ -z "$PUBLISH_USER" ]]; then
-            PUBLISH_USER="${{ github.actor }}"
-          fi
-          if [[ -z "$PUBLISH_PAT" ]]; then
-            PUBLISH_PAT="${{ github.token }}"
-          fi
-          export publishUser="$PUBLISH_USER"
-          export publishPAT="$PUBLISH_PAT"
-          export publishRepo="$PUBLISH_REPO"
-          echo "Publishing target: ${publishRepo}"
-
-          git config user.name "$GIT_USER"
-          git config user.email "$GIT_EMAIL"
+          git config user.name ${{ secrets.BALLERINA_BOT_USERNAME }}
+          git config user.email ${{ secrets.BALLERINA_BOT_EMAIL }}
           git checkout -b release-${VERSION}
-          if [[ "$PRIVATE_RELEASE" == "true" ]]; then
-            ./gradlew build -x test -Pversion=${VERSION}
-          else
-            ./gradlew build -x :jballerina-debugger-integration-test:test -Pversion=${VERSION}
-          fi
-          if [[ "$LOCAL_PUBLISH" == "true" ]]; then
-            ./gradlew -Pversion=${VERSION} publishToMavenLocal -x test --continue
-          else
-            ./gradlew -Pversion=${VERSION} publish -x test --continue
-          fi
+          ./gradlew build -x :jballerina-debugger-integration-test:test -Pversion=${VERSION}
+          ./gradlew -Pversion=${VERSION} publish -x test --continue
       - name: Create Release Tag
-        if: ${{ env.LOCAL_PUBLISH != 'true' }}
         run: |
-          GIT_USER="${{ secrets.BALLERINA_BOT_USERNAME }}"
-          GIT_EMAIL="${{ secrets.BALLERINA_BOT_EMAIL }}"
-          if [[ -z "$GIT_USER" ]]; then
-            GIT_USER="${{ github.actor }}"
-          fi
-          if [[ -z "$GIT_EMAIL" ]]; then
-            GIT_EMAIL="${{ github.actor }}@users.noreply.github.com"
-          fi
-          git config --local user.name "$GIT_USER"
-          git config --local user.email "$GIT_EMAIL"
+          git config --local user.name ${{ secrets.BALLERINA_BOT_USERNAME }}
+          git config --local user.email ${{ secrets.BALLERINA_BOT_EMAIL }}
           git tag -a v${VERSION} -m "Release v${VERSION}"
           git push origin v${VERSION}
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.BALLERINA_BOT_TOKEN }}
       - name: Create Github release from the release tag
-        if: ${{ env.LOCAL_PUBLISH != 'true' }}
         run: |
-          RELEASE_TOKEN="${{ secrets.BALLERINA_BOT_TOKEN }}"
-          if [[ -z "$RELEASE_TOKEN" ]]; then
-            RELEASE_TOKEN="${{ github.token }}"
-          fi
           if [[ "$PRIVATE_RELEASE" == "true" ]]; then
-            curl --request POST 'https://api.github.com/repos/${{ github.repository }}/releases' \
+            curl --request POST 'https://api.github.com/repos/ballerina-platform/ballerina-lang/releases' \
             --header 'Accept: application/vnd.github.v3+json' \
-            --header "Authorization: Bearer ${RELEASE_TOKEN}" \
+            --header 'Authorization: Bearer ${{ secrets.BALLERINA_BOT_TOKEN }}' \
             --header 'Content-Type: application/json' \
             --data-raw '{
                 "tag_name": "v'"$VERSION"'",
@@ -148,9 +94,9 @@ jobs:
                 "prerelease": true
             }'
           else
-            curl --request POST 'https://api.github.com/repos/${{ github.repository }}/releases' \
+            curl --request POST 'https://api.github.com/repos/ballerina-platform/ballerina-lang/releases' \
             --header 'Accept: application/vnd.github.v3+json' \
-            --header "Authorization: Bearer ${RELEASE_TOKEN}" \
+            --header 'Authorization: Bearer ${{ secrets.BALLERINA_BOT_TOKEN }}' \
             --header 'Content-Type: application/json' \
             --data-raw '{
                 "tag_name": "v'"$VERSION"'",
@@ -158,9 +104,8 @@ jobs:
             }'
           fi
       - name: Post release PR
-        if: ${{ env.LOCAL_PUBLISH != 'true' }}
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.BALLERINA_BOT_TOKEN }}
         run: |
           curl -fsSL https://github.com/github/hub/raw/master/script/get | bash -s 2.14.1
           bin/hub pull-request -m "[Automated] Sync master after "$VERSION" release"

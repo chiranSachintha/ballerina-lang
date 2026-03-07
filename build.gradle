@@ -38,8 +38,7 @@ subprojects {
         repositories {
             maven {
                 name = "GitHubPackages"
-                def publishRepo = System.getenv("publishRepo") ?: "ballerina-platform/ballerina-lang"
-                url = uri("https://maven.pkg.github.com/${publishRepo}")
+                url = uri("https://maven.pkg.github.com/ballerina-platform/ballerina-lang")
                 credentials {
                     username System.getenv("publishUser")
                     password System.getenv("publishPAT")
