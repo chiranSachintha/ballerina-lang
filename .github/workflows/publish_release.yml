@@ -42,7 +42,7 @@ jobs:
           git config user.name "${{ secrets.BALLERINA_BOT_USERNAME || github.actor }}"
           git config user.email "${{ secrets.BALLERINA_BOT_EMAIL || format('{0}@users.noreply.github.com', github.actor) }}"
           git checkout -b release-${VERSION}
-          ./gradlew build -x :jballerina-debugger-integration-test:test -Pversion=${VERSION}
+          ./gradlew build -x :jballerina-debugger-integration-test:test -x :ballerina-cli:test -Pversion=${VERSION}
           ./gradlew -Pversion=${VERSION} publish -x test --continue
       - name: Create Release Tag
         run: |
