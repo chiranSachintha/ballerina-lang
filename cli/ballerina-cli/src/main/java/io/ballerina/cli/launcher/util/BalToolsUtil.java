@@ -29,6 +29,7 @@ import io.ballerina.projects.ProjectException;
 import io.ballerina.projects.SemanticVersion;
 import io.ballerina.projects.internal.BalToolsManifestBuilder;
 import io.ballerina.projects.internal.BalaFiles;
+import io.ballerina.projects.internal.DistributionVersion;
 import io.ballerina.projects.internal.model.PackageJson;
 import io.ballerina.projects.util.CustomURLClassLoader;
 import io.ballerina.projects.util.ProjectConstants;
@@ -222,13 +223,13 @@ public final class BalToolsUtil {
     }
 
     private static boolean isToolDistCompatibilityWithCurrentDist(BalToolsManifest.Tool tool) {
-        SemanticVersion currentDistVersion = SemanticVersion.from(RepoUtils.getBallerinaShortVersion());
-        Optional<SemanticVersion> toolDistVersion = getToolDistVersion(tool);
-        return toolDistVersion.filter(semanticVersion ->
-                isVersionsCompatible(currentDistVersion, semanticVersion)).isPresent();
+        DistributionVersion currentDistVersion = DistributionVersion.from(RepoUtils.getBallerinaShortVersion());
+        Optional<DistributionVersion> toolDistVersion = getToolDistVersion(tool);
+        return toolDistVersion.filter(distributionVersion ->
+                isVersionsCompatible(currentDistVersion, distributionVersion)).isPresent();
     }
 
-    private static Optional<SemanticVersion> getToolDistVersion(BalToolsManifest.Tool tool) {
+    private static Optional<DistributionVersion> getToolDistVersion(BalToolsManifest.Tool tool) {
         Path repoBalaDirPath;
         if (ProjectConstants.LOCAL_REPOSITORY_NAME.equals(tool.repository())) {
             repoBalaDirPath = ProjectUtils.createAndGetHomeReposPath().resolve(
@@ -247,11 +248,11 @@ public final class BalToolsUtil {
             return Optional.empty();
         }
         PackageJson packageJson = BalaFiles.readPackageJson(balaPath);
-        return Optional.of(SemanticVersion.from(packageJson.getBallerinaVersion()));
+        return Optional.of(DistributionVersion.from(packageJson.getBallerinaVersion()));
     }
 
-    private static boolean isVersionsCompatible(SemanticVersion localDistVersion,
-                                                SemanticVersion toolDistVersion) {
+    private static boolean isVersionsCompatible(DistributionVersion localDistVersion,
+                                                DistributionVersion toolDistVersion) {
         return localDistVersion.major() == toolDistVersion.major()
                 && localDistVersion.minor() >= toolDistVersion.minor();
     }

@@ -21,6 +21,7 @@ package io.ballerina.projects;
 import io.ballerina.projects.buildtools.ToolContext;
 import io.ballerina.projects.environment.PackageLockingMode;
 import io.ballerina.projects.environment.ToolResolutionRequest;
+import io.ballerina.projects.internal.DistributionVersion;
 import io.ballerina.projects.internal.PackageDiagnostic;
 import io.ballerina.projects.internal.ProjectDiagnosticErrorCode;
 import io.ballerina.projects.util.BalToolsUtil;
@@ -194,7 +195,8 @@ public class BuildToolResolution {
         }
         SemanticVersion prevDistributionVersion = project.currentPackage().dependencyManifest()
                 .distributionVersion();
-        SemanticVersion currentDistributionVersion = SemanticVersion.from(RepoUtils.getBallerinaShortVersion());
+        SemanticVersion currentDistributionVersion = SemanticVersion.from(
+                DistributionVersion.from(RepoUtils.getBallerinaShortVersion()).toSemanticVersionString());
 
         if (prevDistributionVersion == null || currentDistributionVersion.greaterThan(prevDistributionVersion)) {
             return PackageLockingMode.SOFT;

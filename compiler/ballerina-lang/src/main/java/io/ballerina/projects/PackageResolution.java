@@ -32,6 +32,7 @@ import io.ballerina.projects.internal.DefaultDiagnosticResult;
 import io.ballerina.projects.internal.ImportModuleRequest;
 import io.ballerina.projects.internal.ImportModuleResponse;
 import io.ballerina.projects.internal.ModuleResolver;
+import io.ballerina.projects.internal.DistributionVersion;
 import io.ballerina.projects.internal.PackageContainer;
 import io.ballerina.projects.internal.PackageDiagnostic;
 import io.ballerina.projects.internal.ProjectDiagnosticErrorCode;
@@ -387,7 +388,8 @@ public class PackageResolution {
         boolean isNewUpdateDist = false;
         if (isExistingPackage) {
             SemanticVersion prevDistributionVersion = rootPackageContext.dependencyManifest().distributionVersion();
-            SemanticVersion currentDistributionVersion = SemanticVersion.from(RepoUtils.getBallerinaShortVersion());
+            SemanticVersion currentDistributionVersion = SemanticVersion.from(
+                    DistributionVersion.from(RepoUtils.getBallerinaShortVersion()).toSemanticVersionString());
             if (prevDistributionVersion == null) {
                 // Built with Update 4 or less
                 if (PackageLockingMode.SOFT != packageLockingMode) {

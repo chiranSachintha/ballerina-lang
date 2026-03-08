@@ -47,6 +47,7 @@ import io.ballerina.projects.ResolvedPackageDependency;
 import io.ballerina.projects.SemanticVersion;
 import io.ballerina.projects.Settings;
 import io.ballerina.projects.environment.PackageLockingMode;
+import io.ballerina.projects.internal.DistributionVersion;
 import io.ballerina.projects.internal.PackageDiagnostic;
 import io.ballerina.projects.internal.ProjectDiagnosticErrorCode;
 import io.ballerina.projects.internal.model.BuildJson;
@@ -208,7 +209,8 @@ public final class ProjectUtils {
     public static Optional<PackageDiagnostic> getWarningForHigherDistribution(
             Project project, PackageLockingMode packageLockingMode) {
         SemanticVersion prevDistributionVersion = project.currentPackage().dependencyManifest().distributionVersion();
-        SemanticVersion currentDistributionVersion = SemanticVersion.from(RepoUtils.getBallerinaShortVersion());
+        SemanticVersion currentDistributionVersion = SemanticVersion.from(
+                DistributionVersion.from(RepoUtils.getBallerinaShortVersion()).toSemanticVersionString());
 
         if (project.currentPackage().dependencyManifest().dependenciesTomlVersion() != null) {
             String currentVersionForDiagnostic = String.valueOf(currentDistributionVersion.minor());

@@ -24,6 +24,7 @@ import io.ballerina.projects.ProjectEnvironmentBuilder;
 import io.ballerina.projects.SemanticVersion;
 import io.ballerina.projects.environment.Environment;
 import io.ballerina.projects.environment.EnvironmentBuilder;
+import io.ballerina.projects.internal.DistributionVersion;
 import io.ballerina.projects.internal.model.BuildJson;
 import io.ballerina.projects.util.ProjectUtils;
 import org.apache.commons.io.FileUtils;
@@ -1528,7 +1529,7 @@ public class BuildCommandTest extends BaseCommandTest {
     }
 
     private String getNewVersionForOldDistWarning() {
-        SemanticVersion currentDistributionVersion = SemanticVersion.from(RepoUtils.getBallerinaShortVersion());
+        DistributionVersion currentDistributionVersion = DistributionVersion.from(RepoUtils.getBallerinaShortVersion());
         String currentVersionForDiagnostic = String.valueOf(currentDistributionVersion.minor());
         if (currentDistributionVersion.patch() != 0) {
             currentVersionForDiagnostic += DOT + currentDistributionVersion.patch();

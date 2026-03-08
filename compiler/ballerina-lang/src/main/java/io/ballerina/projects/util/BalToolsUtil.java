@@ -23,6 +23,7 @@ import io.ballerina.projects.ProjectException;
 import io.ballerina.projects.SemanticVersion;
 import io.ballerina.projects.Settings;
 import io.ballerina.projects.internal.BalaFiles;
+import io.ballerina.projects.internal.DistributionVersion;
 import io.ballerina.projects.internal.model.PackageJson;
 import org.ballerinalang.central.client.CentralAPIClient;
 import org.ballerinalang.central.client.CentralClientConstants;
@@ -68,7 +69,8 @@ public class BalToolsUtil {
      * @param toolDistVersion    Tool distribution version
      * @return true if compatible, false otherwise
      */
-    public static boolean isCompatibleWithDistVersion(SemanticVersion distVersion, SemanticVersion toolDistVersion) {
+    public static boolean isCompatibleWithDistVersion(DistributionVersion distVersion,
+                                                      DistributionVersion toolDistVersion) {
         return distVersion.major() == toolDistVersion.major()
                 && distVersion.minor() >= toolDistVersion.minor();
     }
@@ -83,10 +85,10 @@ public class BalToolsUtil {
      * @return true if compatible, false otherwise
      */
     public static boolean isCompatibleWithPlatform(String org, String name, String version, String repository) {
-        SemanticVersion currentDistVersion = SemanticVersion.from(RepoUtils.getBallerinaShortVersion());
-        Optional<SemanticVersion> toolDistVersion = getToolDistVersionFromCache(org, name, version, repository);
-        return toolDistVersion.filter(semanticVersion ->
-                isCompatibleWithDistVersion(currentDistVersion, semanticVersion)).isPresent();
+        DistributionVersion currentDistVersion = DistributionVersion.from(RepoUtils.getBallerinaShortVersion());
+        Optional<DistributionVersion> toolDistVersion = getToolDistVersionFromCache(org, name, version, repository);
+        return toolDistVersion.filter(distributionVersion ->
+                isCompatibleWithDistVersion(currentDistVersion, distributionVersion)).isPresent();
     }
 
     /**
@@ -113,12 +115,12 @@ public class BalToolsUtil {
      */
     public static SemanticVersion.VersionCompatibilityResult compareToolDistWithCurrentDist(
             String org, String name, String versions, String repository) {
-        SemanticVersion currentDistVersion = SemanticVersion.from(RepoUtils.getBallerinaShortVersion());
-        Optional<SemanticVersion> toolDistVersion = getToolDistVersionFromCache(org, name, versions, repository);
+        DistributionVersion currentDistVersion = DistributionVersion.from(RepoUtils.getBallerinaShortVersion());
+        Optional<DistributionVersion> toolDistVersion = getToolDistVersionFromCache(org, name, versions, repository);
         if (toolDistVersion.isEmpty()) {
             return SemanticVersion.VersionCompatibilityResult.INCOMPATIBLE;
         }
-        return toolDistVersion.get().compareTo(currentDistVersion);
+        return compareDistVersions(toolDistVersion.get(), currentDistVersion);
     }
 
     /**
@@ -186,7 +188,7 @@ public class BalToolsUtil {
         return new BalToolsManifest.Tool(toolId, toolInfo[0], toolInfo[1], toolInfo[2], true, null);
     }
 
-    private static Optional<SemanticVersion> getToolDistVersionFromCache(
+    private static Optional<DistributionVersion> getToolDistVersionFromCache(
             String org, String name, String version, String repository) {
         Path balaPath = ProjectUtils.getPackagePath(getRepoPath(repository), org, name, version);
         PackageJson packageJson;
@@ -196,6 +198,20 @@ public class BalToolsUtil {
             return Optional.empty();
         }
 
-        return Optional.of(SemanticVersion.from(packageJson.getBallerinaVersion()));
+        return Optional.of(DistributionVersion.from(packageJson.getBallerinaVersion()));
+    }
+
+    private static SemanticVersion.VersionCompatibilityResult compareDistVersions(DistributionVersion toolDistVersion,
+                                                                                  DistributionVersion currentDistVersion) {
+        if (toolDistVersion.major() != currentDistVersion.major()) {
+            return SemanticVersion.VersionCompatibilityResult.INCOMPATIBLE;
+        }
+        if (toolDistVersion.greaterThan(currentDistVersion)) {
+            return SemanticVersion.VersionCompatibilityResult.GREATER_THAN;
+        }
+        if (currentDistVersion.greaterThan(toolDistVersion)) {
+            return SemanticVersion.VersionCompatibilityResult.LESS_THAN;
+        }
+        return SemanticVersion.VersionCompatibilityResult.EQUAL;
     }
 }
