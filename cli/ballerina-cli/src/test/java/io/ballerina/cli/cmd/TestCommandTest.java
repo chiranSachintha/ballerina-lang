@@ -381,6 +381,7 @@ public class TestCommandTest extends BaseCommandTest {
         }
         // Cache package pkg_a 1.0.0
         Path balTestWithStickyFlagPath = testResources.resolve("balTestWithStickyFlag");
+        deleteDirectory(testDistCacheDirectory.resolve("bala").resolve("pramjs").resolve("pkg_a"));
         BCompileUtil.compileAndCacheBala(balTestWithStickyFlagPath.resolve("pkg_a_100"),
                 testDistCacheDirectory, projectEnvironmentBuilder);
 

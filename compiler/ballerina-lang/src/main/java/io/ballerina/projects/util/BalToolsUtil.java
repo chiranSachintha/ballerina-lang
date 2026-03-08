@@ -201,8 +201,8 @@ public class BalToolsUtil {
         return Optional.of(DistributionVersion.from(packageJson.getBallerinaVersion()));
     }
 
-    private static SemanticVersion.VersionCompatibilityResult compareDistVersions(DistributionVersion toolDistVersion,
-                                                                                  DistributionVersion currentDistVersion) {
+    private static SemanticVersion.VersionCompatibilityResult compareDistVersions(
+            DistributionVersion toolDistVersion, DistributionVersion currentDistVersion) {
         if (toolDistVersion.major() != currentDistVersion.major()) {
             return SemanticVersion.VersionCompatibilityResult.INCOMPATIBLE;
         }
