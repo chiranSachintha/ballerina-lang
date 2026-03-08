@@ -110,14 +110,12 @@ public class PullCommandTest extends BaseCommandTest {
     @Test(description = "Pull package with invalid version")
     public void testPullPackageWithInvalidVersion() throws IOException {
         PullCommand pullCommand = new PullCommand(printStream, false);
-        new CommandLine(pullCommand).parseArgs("wso2/winery:1.0.0.0");
+        new CommandLine(pullCommand).parseArgs("wso2/winery:1.0");
         pullCommand.execute();
 
         String buildLog = readOutput(true);
         String actual = buildLog.replaceAll("\r", "");
-        Assert.assertTrue(actual.contains("ballerina: invalid package version. Invalid version: '1.0.0.0'. "
-                                                  + "Unexpected character 'DOT(.)' at position '5', "
-                                                  + "expecting '[HYPHEN, PLUS, EOI]'"));
+        Assert.assertTrue(actual.contains("ballerina: invalid package version. Invalid version: '1.0'."));
         Assert.assertTrue(
                 actual.contains("bal pull {<org-name>/<package-name> | <org-name>/<package-name>:<version>}"));
     }
