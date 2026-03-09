@@ -43,37 +43,8 @@ jobs:
           git config user.name "${{ secrets.BALLERINA_BOT_USERNAME || github.actor }}"
           git config user.email "${{ secrets.BALLERINA_BOT_EMAIL || format('{0}@users.noreply.github.com', github.actor) }}"
           git checkout -b release-${VERSION}
-          ./gradlew assemble -Pversion=${VERSION} -PupdateNewVersion=${UPDATE_NEW_VERSION}
-          ./gradlew -Pversion=${VERSION} -PupdateNewVersion=${UPDATE_NEW_VERSION} \
-            :ballerina-runtime:publish \
-            :ballerina-rt:publish \
-            :ballerina-lang:publish \
-            :ballerina-lang:annotations:publish \
-            :ballerina-lang:internal:publish \
-            :ballerina-lang:jballerina.java:publish \
-            :ballerina-lang:array:publish \
-            :ballerina-lang:bool:publish \
-            :ballerina-lang:decimal:publish \
-            :ballerina-lang:error:publish \
-            :ballerina-lang:floatingpoint:publish \
-            :ballerina-lang:function:publish \
-            :ballerina-lang:future:publish \
-            :ballerina-lang:integer:publish \
-            :ballerina-lang:map:publish \
-            :ballerina-lang:natural:publish \
-            :ballerina-lang:object:publish \
-            :ballerina-lang:query:publish \
-            :ballerina-lang:regexp:publish \
-            :ballerina-lang:runtime:publish \
-            :ballerina-lang:stream:publish \
-            :ballerina-lang:string:publish \
-            :ballerina-lang:table:publish \
-            :ballerina-lang:transaction:publish \
-            :ballerina-lang:typedesc:publish \
-            :ballerina-lang:value:publish \
-            :ballerina-lang:xml:publish \
-            :jballerina-tools:publish \
-            -x test --continue
+          ./gradlew assemble -PupdateNewVersion=${UPDATE_NEW_VERSION}
+          ./gradlew publish -PupdateNewVersion=${UPDATE_NEW_VERSION} -x test --continue
       - name: Create Release Tag
         run: |
           git config --local user.name "${{ secrets.BALLERINA_BOT_USERNAME || github.actor }}"
