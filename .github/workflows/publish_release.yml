@@ -30,19 +30,21 @@ jobs:
       - name: Set version env variable
         run: |
           echo "VERSION=$(./gradlew properties | grep ^version: | cut -d\  -f2 | sed 's@-SNAPSHOT@@')" >> $GITHUB_ENV
+          echo "UPDATE_NEW_VERSION=$(grep '^updateNewVersion=' gradle.properties | cut -d= -f2)" >> $GITHUB_ENV
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
       - name: Publish artifact
         env:
           publishUser: ${{ secrets.BALLERINA_BOT_USERNAME || github.actor }}
           publishPAT: ${{ secrets.BALLERINA_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          publishRepository: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.BALLERINA_BOT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "${{ secrets.BALLERINA_BOT_USERNAME || github.actor }}"
           git config user.email "${{ secrets.BALLERINA_BOT_EMAIL || format('{0}@users.noreply.github.com', github.actor) }}"
           git checkout -b release-${VERSION}
-          ./gradlew build -x :jballerina-debugger-integration-test:test -Pversion=${VERSION}
-          ./gradlew -Pversion=${VERSION} publish -x test --continue
+          ./gradlew assemble -Pversion=${VERSION} -PupdateNewVersion=${UPDATE_NEW_VERSION}
+          ./gradlew -Pversion=${VERSION} -PupdateNewVersion=${UPDATE_NEW_VERSION} publish -x test --continue
       - name: Create Release Tag
         run: |
           git config --local user.name "${{ secrets.BALLERINA_BOT_USERNAME || github.actor }}"
