@@ -27,12 +27,19 @@ allprojects {
 
 subprojects {
     apply plugin: 'maven-publish'
+    def updateNewVersion = rootProject.findProperty("updateNewVersion")
+    def useUpdateVersionForPublication = project.path == ':ballerina-runtime' ||
+            project.path == ':ballerina-rt' ||
+            project.path == ':ballerina-lang' ||
+            project.path.startsWith(':ballerina-lang:')
+    def publicationVersion = (useUpdateVersionForPublication && updateNewVersion) ?
+            updateNewVersion : project.version
     publishing {
         publications {
             mavenJava(MavenPublication) {
                 groupId project.group
                 artifactId project.name
-                version = project.version
+                version = publicationVersion
             }
         }
         repositories {
