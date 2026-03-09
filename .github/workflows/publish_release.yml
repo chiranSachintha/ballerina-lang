@@ -43,8 +43,8 @@ jobs:
           git config user.name "${{ secrets.BALLERINA_BOT_USERNAME || github.actor }}"
           git config user.email "${{ secrets.BALLERINA_BOT_EMAIL || format('{0}@users.noreply.github.com', github.actor) }}"
           git checkout -b release-${VERSION}
-          ./gradlew assemble -PupdateNewVersion=${UPDATE_NEW_VERSION}
-          ./gradlew publish -PupdateNewVersion=${UPDATE_NEW_VERSION} -x test --continue
+          ./gradlew assemble -Pversion=${VERSION} -PupdateNewVersion=${UPDATE_NEW_VERSION}
+          ./gradlew publish -Pversion=${VERSION} -PupdateNewVersion=${UPDATE_NEW_VERSION} -x test --continue
       - name: Create Release Tag
         run: |
           git config --local user.name "${{ secrets.BALLERINA_BOT_USERNAME || github.actor }}"
