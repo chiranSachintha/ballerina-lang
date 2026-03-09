@@ -31,6 +31,7 @@ subprojects {
     def updateNewVersion = rootProject.findProperty("updateNewVersion")
     def useUpdateVersionForPublication = project.path == ':ballerina-runtime' ||
             project.path == ':ballerina-rt' ||
+            project.path == ':jballerina-tools' ||
             project.path == ':ballerina-lang' ||
             project.path.startsWith(':ballerina-lang:')
     def publicationVersion = (useUpdateVersionForPublication && updateNewVersion) ?
