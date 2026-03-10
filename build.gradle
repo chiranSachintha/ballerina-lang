@@ -34,8 +34,10 @@ subprojects {
             project.path == ':jballerina-tools' ||
             project.path == ':ballerina-lang' ||
             project.path.startsWith(':ballerina-lang:')
-    def publicationVersion = (useUpdateVersionForPublication && updateNewVersion) ?
-            updateNewVersion : project.version
+    if (useUpdateVersionForPublication && updateNewVersion) {
+        version = updateNewVersion
+    }
+    def publicationVersion = project.version
     publishing {
         publications {
             mavenJava(MavenPublication) {
