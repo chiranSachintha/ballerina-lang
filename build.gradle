@@ -10,9 +10,6 @@ plugins {
     id 'repositories'
 }
 
-import java.net.HttpURLConnection
-import java.net.URI
-
 def withUpdateLevel = { String baseVersion, Object updateLevel ->
     if (updateLevel == null || updateLevel.toString().trim().isEmpty()) {
         return baseVersion
@@ -25,28 +22,6 @@ def withUpdateLevel = { String baseVersion, Object updateLevel ->
     String core = qualifierStart >= 0 ? baseVersion.substring(0, qualifierStart) : baseVersion
     String qualifier = qualifierStart >= 0 ? baseVersion.substring(qualifierStart) : ""
     return core + "." + level + qualifier
-}
-
-def githubPackageVersionExists = { String githubPackageRepo, String groupId, String artifactId, String version ->
-    String groupPath = groupId.replace('.', '/')
-    String pomName = "${artifactId}-${version}.pom"
-    String url = "https://maven.pkg.github.com/${githubPackageRepo}/${groupPath}/${artifactId}/${version}/${pomName}"
-    try {
-        HttpURLConnection conn = (HttpURLConnection) URI.create(url).toURL().openConnection()
-        conn.setRequestMethod("GET")
-        conn.setInstanceFollowRedirects(false)
-        String publishUser = System.getenv("publishUser")
-        String publishPAT = System.getenv("publishPAT")
-        if (publishUser != null && publishPAT != null) {
-            String auth = "${publishUser}:${publishPAT}".bytes.encodeBase64().toString()
-            conn.setRequestProperty("Authorization", "Basic ${auth}")
-        }
-        int responseCode = conn.responseCode
-        conn.disconnect()
-        return responseCode == 200
-    } catch (Exception ignored) {
-        return false
-    }
 }
 
 allprojects {
@@ -112,13 +87,9 @@ subprojects {
             if (coreVersion.split("\\.").length != 3) {
                 return true
             }
-            boolean exists = githubPackageVersionExists(
-                    githubPackageRepo, project.group.toString(), project.name, versionString)
-            if (exists) {
-                logger.lifecycle("Skipping ${path}: ${project.group}:${project.name}:${publicationVersion} " +
-                        "(3-segment artifact already exists during update-level release)")
-            }
-            return !exists
+            logger.lifecycle("Skipping ${path}: ${project.group}:${project.name}:${publicationVersion} " +
+                    "(3-segment artifact during update-level release)")
+            return false
         }
     }
 
