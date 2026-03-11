@@ -73,7 +73,8 @@ subprojects {
         // Disable check snapshots temporarily
         failOnSnapshotDependencies = false
         failOnCommitNeeded = false
-        tagTemplate = 'v${version}'
+        def releaseTagVersion = withUpdateLevel(rootProject.version.toString(), rootProject.findProperty("updateLevel"))
+        tagTemplate = "v${releaseTagVersion}"
         buildTasks = ['build']
         git {
             // To release from any branch
