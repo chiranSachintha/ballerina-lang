@@ -34,7 +34,7 @@ def withUpdateLevel = { String baseVersion, Object updateLevel ->
     return core + "." + level + qualifier
 }
 
-def effectiveToolsVersion = withUpdateLevel(project.version.toString(), rootProject.findProperty("updateLevel"))
+def effectiveToolsVersion = withUpdateLevel(rootProject.version.toString(), rootProject.findProperty("updateLevel"))
 
 configurations.all {
     resolutionStrategy.preferProjectModules()
