@@ -15,6 +15,9 @@ def withUpdateLevel = { String baseVersion, Object updateLevel ->
         return baseVersion
     }
     String level = updateLevel.toString().trim()
+    if (level.isInteger() && Integer.parseInt(level) == 0) {
+        return baseVersion
+    }
     int qualifierStart = baseVersion.indexOf('-')
     String core = qualifierStart >= 0 ? baseVersion.substring(0, qualifierStart) : baseVersion
     String qualifier = qualifierStart >= 0 ? baseVersion.substring(qualifierStart) : ""
