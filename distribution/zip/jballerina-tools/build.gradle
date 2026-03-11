@@ -20,7 +20,18 @@ plugins {
     id 'repositories'
 }
 
-def effectiveToolsVersion = rootProject.findProperty("updateNewVersion") ?: project.version
+def withUpdateLevel = { String baseVersion, Object updateLevel ->
+    if (updateLevel == null || updateLevel.toString().trim().isEmpty()) {
+        return baseVersion
+    }
+    String level = updateLevel.toString().trim()
+    int qualifierStart = baseVersion.indexOf('-')
+    String core = qualifierStart >= 0 ? baseVersion.substring(0, qualifierStart) : baseVersion
+    String qualifier = qualifierStart >= 0 ? baseVersion.substring(qualifierStart) : ""
+    return core + "." + level + qualifier
+}
+
+def effectiveToolsVersion = withUpdateLevel(project.version.toString(), rootProject.findProperty("updateLevel"))
 
 configurations.all {
     resolutionStrategy.preferProjectModules()

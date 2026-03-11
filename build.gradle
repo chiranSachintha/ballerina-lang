@@ -10,6 +10,17 @@ plugins {
     id 'repositories'
 }
 
+def withUpdateLevel = { String baseVersion, Object updateLevel ->
+    if (updateLevel == null || updateLevel.toString().trim().isEmpty()) {
+        return baseVersion
+    }
+    String level = updateLevel.toString().trim()
+    int qualifierStart = baseVersion.indexOf('-')
+    String core = qualifierStart >= 0 ? baseVersion.substring(0, qualifierStart) : baseVersion
+    String qualifier = qualifierStart >= 0 ? baseVersion.substring(qualifierStart) : ""
+    return core + "." + level + qualifier
+}
+
 allprojects {
     tasks.withType(JavaCompile).configureEach {
         options.fork = true
@@ -28,14 +39,14 @@ allprojects {
 subprojects {
     apply plugin: 'maven-publish'
     def githubPackageRepo = System.getenv("publishRepository") ?: "ballerina-platform/ballerina-lang"
-    def updateNewVersion = rootProject.findProperty("updateNewVersion")
+    def updateLevel = rootProject.findProperty("updateLevel")
     def useUpdateVersionForPublication = project.path == ':ballerina-runtime' ||
             project.path == ':ballerina-rt' ||
             project.path == ':jballerina-tools' ||
             project.path == ':ballerina-lang' ||
             project.path.startsWith(':ballerina-lang:')
-    if (useUpdateVersionForPublication && updateNewVersion) {
-        version = updateNewVersion
+    if (useUpdateVersionForPublication && updateLevel) {
+        version = withUpdateLevel(project.version.toString(), updateLevel)
     }
     def publicationVersion = project.version
     publishing {
