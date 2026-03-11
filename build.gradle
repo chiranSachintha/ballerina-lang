@@ -74,6 +74,13 @@ subprojects {
 
     tasks.matching { it.name == "publishMavenJavaPublicationToGitHubPackagesRepository" }.configureEach {
         onlyIf {
+            String configuredUpdateLevel = String.valueOf(rootProject.findProperty("updateLevel") ?: "0").trim()
+            boolean isUpdateLevelRelease = configuredUpdateLevel.isInteger() &&
+                    Integer.parseInt(configuredUpdateLevel) > 0
+            if (!isUpdateLevelRelease) {
+                return true
+            }
+
             String versionString = publicationVersion.toString()
             int qualifierStart = versionString.indexOf('-')
             String coreVersion = qualifierStart >= 0 ? versionString.substring(0, qualifierStart) : versionString
@@ -81,7 +88,7 @@ subprojects {
                 return true
             }
             logger.lifecycle("Skipping ${path}: ${project.group}:${project.name}:${publicationVersion} " +
-                    "(3-segment release version)")
+                    "(3-segment artifact during update-level release)")
             return false
         }
     }
