@@ -72,7 +72,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create Github release from the release tag
         run: |
-          curl --request POST 'https://api.github.com/repos/ballerina-platform/ballerina-lang/releases' \
+          curl --request POST 'https://api.github.com/repos/wso2-enterprise/support-ballerina-lang/releases' \
           --header 'Accept: application/vnd.github.v3+json' \
           --header 'Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
           --header 'Content-Type: application/json' \
