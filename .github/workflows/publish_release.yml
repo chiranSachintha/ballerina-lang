@@ -29,8 +29,8 @@ jobs:
           set-java-home: 'false'
       - name: Set version env variable
         run: |
-          BASE_VERSION=$(grep -w '^version=' gradle.properties | cut -d= -f2 | sed 's/-SNAPSHOT//')
-          UPDATE_LEVEL=$(grep -w '^updateLevel=' gradle.properties | cut -d= -f2)
+          BASE_VERSION=$(grep '^version=' gradle.properties | cut -d= -f2 | sed 's/-SNAPSHOT//')
+          UPDATE_LEVEL=$(grep '^updateLevel=' gradle.properties | cut -d= -f2)
           echo "BASE_VERSION=$BASE_VERSION" >> $GITHUB_ENV
           echo "UPDATE_LEVEL=$UPDATE_LEVEL" >> $GITHUB_ENV
           echo "VERSION=$BASE_VERSION.$UPDATE_LEVEL" >> $GITHUB_ENV
