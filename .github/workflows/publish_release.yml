@@ -29,7 +29,11 @@ jobs:
           set-java-home: 'false'
       - name: Set version env variable
         run: |
-          echo "VERSION=$(./gradlew properties | grep ^version: | cut -d\  -f2 | sed 's@-SNAPSHOT@@')" >> $GITHUB_ENV
+          BASE_VERSION=$(grep -w '^version=' gradle.properties | cut -d= -f2 | sed 's/-SNAPSHOT//')
+          UPDATE_LEVEL=$(grep -w '^updateLevel=' gradle.properties | cut -d= -f2)
+          echo "BASE_VERSION=$BASE_VERSION" >> $GITHUB_ENV
+          echo "UPDATE_LEVEL=$UPDATE_LEVEL" >> $GITHUB_ENV
+          echo "VERSION=$BASE_VERSION.$UPDATE_LEVEL" >> $GITHUB_ENV
           echo "BASE_BRANCH=${GITHUB_REF_NAME}" >> $GITHUB_ENV
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -80,6 +84,15 @@ jobs:
               "tag_name": "v'"$VERSION"'",
               "name": "ballerina-lang-v'"$VERSION"'"
           }'
+      - name: Prepare Next Update Level
+        run: |
+          NEXT_UPDATE_LEVEL=$((UPDATE_LEVEL + 1))
+          NEXT_VERSION=${BASE_VERSION}.${NEXT_UPDATE_LEVEL}
+          sed -i "s/^version=.*/version=${BASE_VERSION}-SNAPSHOT/" gradle.properties
+          sed -i "s/^updateLevel=.*/updateLevel=${NEXT_UPDATE_LEVEL}/" gradle.properties
+          git add gradle.properties
+          git commit -m "[Automated] Prepare next release ${NEXT_VERSION}"
+          git push origin release-${VERSION}
       - name: Post release PR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
