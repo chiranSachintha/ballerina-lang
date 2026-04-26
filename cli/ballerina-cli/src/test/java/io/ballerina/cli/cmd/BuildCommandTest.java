@@ -765,6 +765,31 @@ public class BuildCommandTest extends BaseCommandTest {
                 .resolve("hello_world.jar"));
     }
 
+    @Test(description = "Build a valid standalone ballerina file with compile banner enabled")
+    public void testSingleFileWithCompileBanner() throws IOException {
+        Path projectPath = this.testResources.resolve("valid-bal-file").resolve("hello_world.bal");
+        System.setProperty(USER_DIR_PROPERTY, this.testResources.resolve("valid-bal-file").toString());
+        BuildCommand buildCommand = new BuildCommand(
+                projectPath, printStream, printStream, false);
+        new CommandLine(buildCommand).parseArgs("--show-compile-banner");
+        try {
+            buildCommand.execute();
+        } catch (BLauncherException e) {
+            Assert.fail(e.getDetailedMessages().get(0));
+        }
+        String buildLog = readOutput(true);
+        Assert.assertTrue(buildLog.contains("Ballerina compile banner: build started"));
+        Assert.assertTrue(buildLog.contains("Compiling source"));
+
+        Assert.assertTrue(Files.exists(this.testResources
+                .resolve("valid-bal-file")
+                .resolve("hello_world.jar")));
+
+        Files.delete(this.testResources
+                .resolve("valid-bal-file")
+                .resolve("hello_world.jar"));
+    }
+
     @Test(description = "Build a valid Standalone ballerina file with build options")
     public void testSingleFileOverrideBuildOptions() throws IOException {
         Path projectPath = this.testResources.resolve("valid-bal-file").resolve("hello_world.bal");

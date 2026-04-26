@@ -173,7 +173,11 @@ public class BuildCommand implements BLauncherCmd {
     @CommandLine.Option(names = "--generate-config-schema", hidden = true)
     private Boolean configSchemaGen;
 
+    @CommandLine.Option(names = "--show-compile-banner", description = "show a compile banner before building")
+    private Boolean showCompileBanner;
+
     private static final String buildCmd = "bal build [-o <output>] [--offline] [--taint-check]\n" +
+            "                    [--show-compile-banner]\n" +
             "                    [<ballerina-file | package-path>]";
 
     @CommandLine.Option(names = "--observability-included", description = "package observability in the executable " +
@@ -296,6 +300,10 @@ public class BuildCommand implements BLauncherCmd {
         if (!project.buildOptions().nativeImage() && !project.buildOptions().graalVMBuildOptions().isEmpty()) {
             this.outStream.println("WARNING: Additional GraalVM build options are ignored since graalvm " +
                     "flag is not set");
+        }
+
+        if (Boolean.TRUE.equals(showCompileBanner)) {
+            this.outStream.println("Ballerina compile banner: build started");
         }
 
         if (project.kind() == ProjectKind.WORKSPACE_PROJECT) {
